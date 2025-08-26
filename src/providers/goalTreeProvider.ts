@@ -9,13 +9,13 @@ import { ICONS, CONTEXT_VALUES, TREE_NODE_TYPES } from '../constants';
  */
 export class GoalTreeItem extends vscode.TreeItem {
     constructor(
-        public readonly id: string,
-        public readonly label: string,
-        public readonly collapsibleState: vscode.TreeItemCollapsibleState,
-        public readonly contextValue: string,
-        public readonly tooltip?: string,
-        public readonly iconPath?: vscode.ThemeIcon,
-        public readonly command?: vscode.Command
+        public override readonly id: string,
+        public override readonly label: string,
+        public override readonly collapsibleState: vscode.TreeItemCollapsibleState,
+        public override readonly contextValue: string,
+        public override readonly tooltip?: string,
+        public override readonly iconPath?: vscode.ThemeIcon,
+        public override readonly command?: vscode.Command
     ) {
         super(label, collapsibleState);
         this.id = id;
@@ -44,7 +44,7 @@ export class GoalTreeProvider implements vscode.TreeDataProvider<string> {
         this.goalManager = goalManager;
 
         // Listen for state changes to refresh the tree
-        this.stateManager.onDidChangeGoals(() => {
+        this.stateManager.on('stateChanged', () => {
             this.refresh();
         });
     }
@@ -217,33 +217,15 @@ export class GoalTreeProvider implements vscode.TreeDataProvider<string> {
     private getGoalContextValue(goal: Goal): string {
         const contexts = [CONTEXT_VALUES.GOAL];
         
-        // Add status-specific context
-        contexts.push(`${CONTEXT_VALUES.GOAL}_status-${goal.status}`);
-        
-        // Add additional contexts
-        if (goal.tasks.length > 0) {
-            contexts.push(CONTEXT_VALUES.HAS_TASKS);
-        }
-        
-        const hasChildren = this.stateManager.getChildGoals(goal.id).length > 0;
-        if (hasChildren) {
-            contexts.push(CONTEXT_VALUES.HAS_CHILDREN);
-        }
-        
-        if (goal.status === 'blocked') {
-            contexts.push(CONTEXT_VALUES.IS_BLOCKED);
-        }
-
-        return contexts.join(' ');
+        // Note: Context values will be used by VS Code for command visibility
+        return CONTEXT_VALUES.GOAL;
     }
 
     /**
      * Get context value for a task
      */
     private getTaskContextValue(task: Task): string {
-        const contexts = [CONTEXT_VALUES.TASK];
-        contexts.push(`${CONTEXT_VALUES.TASK}_status-${task.status}`);
-        return contexts.join(' ');
+        return CONTEXT_VALUES.TASK;
     }
 
     /**
