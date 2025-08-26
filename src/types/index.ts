@@ -17,3 +17,11 @@ export * from './configuration';
 
 // Parameter types for operations
 export * from './parameters';
+
+// Dependency types
+export * from './Dependency';
+export * from './DependencyStatus';
+export * from './DependencyGraph';
+
+// Enhanced Goal types with dependency support
+export * from './Goal';
