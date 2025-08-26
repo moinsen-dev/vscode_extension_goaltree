@@ -10,6 +10,7 @@
  * - Type guards
  * - Status transitions
  * - Hierarchy management
+ * - Storage utilities (Stream C)
  */
 
 export { generateId, validateId } from './idGenerator';
@@ -70,3 +71,12 @@ export {
   type TraversalOptions,
   type HierarchyStats
 } from './hierarchyUtils';
+
+// Stream C: Storage utilities
+export {
+  StorageUtils,
+  type DataTransformResult,
+  type ExtendedStorageMetadata,
+  type IntegrityCheckResult,
+  type StorageStats
+} from './storage-utils';
