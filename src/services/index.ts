@@ -47,7 +47,15 @@ export {
 export { 
     ChangeNotificationService, 
     ChangeNotificationUtils,
-    type ChangeNotificationEvents
+    EventTypes,
+    type EventPayload,
+    type ChangeEventData,
+    type GoalCreatedData,
+    type GoalUpdatedData,
+    type GoalDeletedData,
+    type SaveTriggeredData,
+    type SaveCompletedData,
+    type SaveFailedData
 } from './ChangeNotificationService';
 export { 
     ChangeTracker, 
