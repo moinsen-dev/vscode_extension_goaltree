@@ -409,3 +409,93 @@ export function batchValidate<T>(
         totalWarnings: results.reduce((sum, r) => sum + (r.warnings?.length ?? 0), 0)
     };
 }
+
+/**
+ * Type guard to check if an object is a Goal
+ */
+export function isGoal(obj: unknown): obj is Goal {
+    if (!obj || typeof obj !== 'object') return false;
+    
+    const goal = obj as Record<string, unknown>;
+    
+    return (
+        typeof goal.id === 'string' &&
+        typeof goal.title === 'string' &&
+        typeof goal.status === 'string' &&
+        ['planned', 'in-progress', 'blocked', 'completed'].includes(goal.status) &&
+        goal.createdAt instanceof Date &&
+        Array.isArray(goal.blockedByIds) &&
+        Array.isArray(goal.tasks) &&
+        (goal.description === undefined || typeof goal.description === 'string') &&
+        (goal.parentId === undefined || typeof goal.parentId === 'string') &&
+        (goal.completedAt === undefined || goal.completedAt instanceof Date)
+    );
+}
+
+/**
+ * Type guard to check if an object is a Task
+ */
+export function isTask(obj: unknown): obj is Task {
+    if (!obj || typeof obj !== 'object') return false;
+    
+    const task = obj as Record<string, unknown>;
+    
+    return (
+        typeof task.id === 'string' &&
+        typeof task.title === 'string' &&
+        typeof task.status === 'string' &&
+        ['todo', 'in-progress', 'done'].includes(task.status) &&
+        typeof task.order === 'number' &&
+        task.createdAt instanceof Date &&
+        (task.description === undefined || typeof task.description === 'string') &&
+        (task.completedAt === undefined || task.completedAt instanceof Date)
+    );
+}
+
+/**
+ * Type guard to check if a status is a valid GoalStatus
+ */
+export function isGoalStatus(status: unknown): status is Goal['status'] {
+    return typeof status === 'string' && 
+           ['planned', 'in-progress', 'blocked', 'completed'].includes(status);
+}
+
+/**
+ * Type guard to check if a status is a valid TaskStatus
+ */
+export function isTaskStatus(status: unknown): status is Task['status'] {
+    return typeof status === 'string' && 
+           ['todo', 'in-progress', 'done'].includes(status);
+}
+
+/**
+ * Type guard to check if an array contains only Goals
+ */
+export function isGoalArray(arr: unknown): arr is Goal[] {
+    return Array.isArray(arr) && arr.every(isGoal);
+}
+
+/**
+ * Type guard to check if an array contains only Tasks
+ */
+export function isTaskArray(arr: unknown): arr is Task[] {
+    return Array.isArray(arr) && arr.every(isTask);
+}
+
+/**
+ * Runtime validation that throws if object is not a Goal
+ */
+export function assertIsGoal(obj: unknown): asserts obj is Goal {
+    if (!isGoal(obj)) {
+        throw new TypeError('Object is not a valid Goal');
+    }
+}
+
+/**
+ * Runtime validation that throws if object is not a Task
+ */
+export function assertIsTask(obj: unknown): asserts obj is Task {
+    if (!isTask(obj)) {
+        throw new TypeError('Object is not a valid Task');
+    }
+}

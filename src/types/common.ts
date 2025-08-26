@@ -81,3 +81,13 @@ export interface Progress {
   total: number;
   percentage: number;
 }
+
+/**
+ * Type guard function type
+ */
+export type TypeGuard<T> = (value: unknown) => value is T;
+
+/**
+ * Assert function type
+ */
+export type AssertFunction<T> = (value: unknown) => asserts value is T;
