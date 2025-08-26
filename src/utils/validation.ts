@@ -406,6 +406,6 @@ export function batchValidate<T>(
         allValid: results.every(r => r.isValid),
         results,
         totalErrors: results.reduce((sum, r) => sum + r.errors.length, 0),
-        totalWarnings: results.reduce((sum, r) => sum + (r.warnings?.length || 0), 0)
+        totalWarnings: results.reduce((sum, r) => sum + (r.warnings?.length ?? 0), 0)
     };
 }

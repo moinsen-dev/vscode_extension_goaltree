@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { TreeViewConfig } from '../models';
+import { TreeViewConfig } from '../models/tree';
 
 /**
  * ConfigurationProvider handles VS Code settings and configuration for the goal tree extension
@@ -34,7 +34,7 @@ export class ConfigurationProvider {
             sortDirection: config.get<'asc' | 'desc'>('sortDirection', 'asc'),
             filter: {
                 searchText: config.get<string>('filter.searchText'),
-                status: config.get<string[]>('filter.status'),
+                status: config.get<string[]>('filter.status') as any,
                 tags: config.get<string[]>('filter.tags'),
                 priorityRange: config.get<{ min: number; max: number }>('filter.priorityRange'),
                 hasTasksOnly: config.get<boolean>('filter.hasTasksOnly', false),
@@ -50,7 +50,7 @@ export class ConfigurationProvider {
         const config = vscode.workspace.getConfiguration(ConfigurationProvider.CONFIGURATION_SECTION);
         
         for (const [key, value] of Object.entries(updates)) {
-            if (key === 'filter' && typeof value === 'object') {
+            if (key === 'filter' && typeof value === 'object' && value !== null) {
                 // Handle nested filter properties
                 for (const [filterKey, filterValue] of Object.entries(value)) {
                     await config.update(`filter.${filterKey}`, filterValue, vscode.ConfigurationTarget.Workspace);
@@ -218,7 +218,10 @@ export class ConfigurationProvider {
         const inspect = config.inspect('');
         if (inspect) {
             // Prefer workspace settings, fall back to global settings
-            const values = { ...inspect.globalValue, ...inspect.workspaceValue };
+            const values = { 
+                ...(inspect.globalValue || {}), 
+                ...(inspect.workspaceValue || {})
+            };
             Object.assign(settings, values);
         }
         

@@ -22,7 +22,6 @@ export interface CreateGoalParams {
  * Parameters for updating an existing goal
  */
 export interface UpdateGoalParams {
-  id: string;
   title?: string;
   description?: string;
   status?: GoalStatus;

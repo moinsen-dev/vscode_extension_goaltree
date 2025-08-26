@@ -230,9 +230,9 @@ export function merge<T extends Record<string, any>>(...objects: Partial<T>[]): 
                     (result as any)[key] = value;
                 } else if (Array.isArray(value)) {
                     (result as any)[key] = [...value];
-                } else if (typeof value === 'object' && 
-                          !(value instanceof Date) && 
-                          !(value instanceof RegExp)) {
+                } else if (typeof value === 'object' && value !== null &&
+                          !((value as any) instanceof Date) && 
+                          !((value as any) instanceof RegExp)) {
                     
                     // Recursively merge objects
                     const existing = (result as any)[key];
@@ -379,7 +379,7 @@ export function omit<T extends Record<string, any>, K extends keyof T>(
     const omitSet = new Set(keys);
     
     for (const key in obj) {
-        if (Object.prototype.hasOwnProperty.call(obj, key) && !omitSet.has(key as K)) {
+        if (Object.prototype.hasOwnProperty.call(obj, key) && !omitSet.has(key as any)) {
             (result as any)[key] = obj[key];
         }
     }

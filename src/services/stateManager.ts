@@ -131,7 +131,7 @@ export class StateManager extends EventEmitter {
      */
     getParentGoal(goalId: string): Goal | undefined {
         const goal = this.goals.get(goalId);
-        if (!goal || !goal.parentId) {
+        if (!goal?.parentId) {
             return undefined;
         }
         return this.goals.get(goal.parentId);

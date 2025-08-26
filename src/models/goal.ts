@@ -101,15 +101,6 @@ export interface CreateGoalParams {
   metadata?: Goal['metadata'];
 }
 
-/**
- * Goal update parameters (partial Goal interface)
- */
-export interface UpdateGoalParams {
-  title?: string;
-  description?: string;
-  status?: GoalStatus;
-  metadata?: Partial<Goal['metadata']>;
-}
 
 /**
  * Task creation parameters

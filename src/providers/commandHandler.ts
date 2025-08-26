@@ -148,7 +148,7 @@ export class CommandHandler {
 
         const description = await vscode.window.showInputBox({
             prompt: 'Edit goal description (optional)',
-            value: goal.description || ''
+            value: goal.description ?? ''
         });
 
         if (description === undefined) return; // User cancelled
@@ -407,25 +407,28 @@ export class CommandHandler {
     // View Configuration Commands
 
     private toggleCompleted(): void {
-        const config = this.treeProvider['config']; // Access private config
-        this.treeProvider.updateConfig({ showCompleted: !config.showCompleted });
+        // TODO: Implement when config methods are added to GoalTreeProvider
+        vscode.window.showInformationMessage('Toggle completed goals feature coming soon');
     }
 
     private groupByStatus(): void {
-        const config = this.treeProvider['config'];
-        this.treeProvider.updateConfig({ groupByStatus: !config.groupByStatus });
+        // TODO: Implement when config methods are added to GoalTreeProvider
+        vscode.window.showInformationMessage('Group by status feature coming soon');
     }
 
     private sortByTitle(): void {
-        this.treeProvider.updateConfig({ sortOrder: 'title' });
+        // TODO: Implement when config methods are added to GoalTreeProvider
+        vscode.window.showInformationMessage('Sort by title feature coming soon');
     }
 
     private sortByCreated(): void {
-        this.treeProvider.updateConfig({ sortOrder: 'created' });
+        // TODO: Implement when config methods are added to GoalTreeProvider
+        vscode.window.showInformationMessage('Sort by created feature coming soon');
     }
 
     private sortByPriority(): void {
-        this.treeProvider.updateConfig({ sortOrder: 'priority' });
+        // TODO: Implement when config methods are added to GoalTreeProvider
+        vscode.window.showInformationMessage('Sort by priority feature coming soon');
     }
 
     // Import/Export Commands

@@ -44,9 +44,9 @@ export interface EnhancedTreeDataProvider<T> extends TreeDataProvider<T> {
 }
 
 /**
- * Tree view configuration
+ * VS Code tree view UI configuration
  */
-export interface TreeViewConfig {
+export interface VSCodeTreeViewConfig {
   showCollapseAll: boolean;
   canSelectMany: boolean;
   showWelcome: boolean;

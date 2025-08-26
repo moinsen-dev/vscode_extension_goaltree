@@ -15,6 +15,5 @@ export type {
   CreateGoalParams, 
   UpdateGoalParams, 
   CreateTaskParams, 
-  UpdateTaskParams,
-  TreeViewConfig
+  UpdateTaskParams
 } from '../types';

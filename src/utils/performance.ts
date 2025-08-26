@@ -173,7 +173,7 @@ export function createProfiler(name: string) {
     
     return {
         profile<T extends (...args: any[]) => any>(func: T, functionName?: string): T {
-            const fname = functionName || func.name || 'anonymous';
+            const fname = functionName ?? func.name ?? 'anonymous';
             
             return ((...args: Parameters<T>): ReturnType<T> => {
                 const start = performance.now();
@@ -181,8 +181,8 @@ export function createProfiler(name: string) {
                 const duration = performance.now() - start;
                 
                 // Update statistics
-                const currentTotal = timers.get(fname) || 0;
-                const currentCount = counts.get(fname) || 0;
+                const currentTotal = timers.get(fname) ?? 0;
+                const currentCount = counts.get(fname) ?? 0;
                 
                 timers.set(fname, currentTotal + duration);
                 counts.set(fname, currentCount + 1);
@@ -200,7 +200,7 @@ export function createProfiler(name: string) {
             }> = [];
             
             for (const [fname, totalTime] of timers.entries()) {
-                const calls = counts.get(fname) || 0;
+                const calls = counts.get(fname) ?? 0;
                 stats.push({
                     function: fname,
                     calls,
