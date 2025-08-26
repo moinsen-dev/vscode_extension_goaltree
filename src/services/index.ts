@@ -6,6 +6,12 @@
  * 
  * Stream C additions: Enhanced storage service with workspace isolation,
  * concurrent access protection, and comprehensive data integrity checks.
+ * 
+ * Stream D additions: Auto-save functionality with change notifications,
+ * debounced saves, and event-driven updates for real-time coordination.
+ * 
+ * Stream E additions: Comprehensive backup and recovery system with
+ * automated backups, data integrity validation, and error recovery.
  */
 
 export { GoalManager } from './goalManager';
@@ -30,3 +36,51 @@ export {
     type LockResult, 
     type LockOptions 
 } from './lock-manager';
+
+// Stream D: Auto-Save and Change Management components
+export { 
+    AutoSaveService, 
+    AutoSaveUtils,
+    type AutoSaveConfig,
+    type AutoSaveStatus
+} from './AutoSaveService';
+export { 
+    ChangeNotificationService, 
+    ChangeNotificationUtils,
+    type ChangeNotificationEvents
+} from './ChangeNotificationService';
+export { 
+    ChangeTracker, 
+    ChangeType,
+    type ChangeEvent,
+    type ChangeBatch,
+    type ChangeStatistics,
+    type ChangeTrackerConfig
+} from './change-tracker';
+
+// Stream E: Backup and Recovery System components
+export { BackupService } from './BackupService';
+export { RecoveryService } from './RecoveryService';
+export { 
+    IntegrityChecker,
+    type ComprehensiveIntegrityResult,
+    type AutoRepairResult,
+    type IntegrityIssue,
+    IntegritySeverity,
+    IntegrityCategory
+} from './integrity-checker';
+
+export type {
+    BackupOptions,
+    BackupSchedule,
+    RestoreOptions,
+    BackupServiceResult
+} from './BackupService';
+
+export type {
+    RecoveryStrategy,
+    CorruptionSeverity,
+    RecoveryScenario,
+    RecoveryResult,
+    RecoveryOptions
+} from './RecoveryService';

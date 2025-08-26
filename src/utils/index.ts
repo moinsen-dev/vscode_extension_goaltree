@@ -11,6 +11,8 @@
  * - Status transitions
  * - Hierarchy management
  * - Storage utilities (Stream C)
+ * - Debouncing utilities (Stream D)
+ * - Backup management utilities (Stream E)
  */
 
 export { generateId, validateId } from './idGenerator';
@@ -29,7 +31,7 @@ export {
   assertIsGoal,
   assertIsTask
 } from './validation';
-export { debounce, throttle, memoize } from './performance';
+export { memoize } from './performance';
 export { deepClone, isEqual, merge } from './objects';
 export { createLogger } from './logger';
 export type { Logger, LogLevel } from './logger';
@@ -80,3 +82,23 @@ export {
   type IntegrityCheckResult,
   type StorageStats
 } from './storage-utils';
+
+// Stream D: Debouncing utilities
+export {
+  debounce,
+  throttle,
+  DebouncePresets,
+  DebounceManager,
+  type DebounceOptions,
+  type DebounceInfo,
+  type DebouncedFunction
+} from './debounce';
+
+// Stream E: Backup management utilities
+export {
+  BackupUtils,
+  BackupTrigger,
+  type BackupMetadata,
+  type BackupRotationPolicy,
+  type BackupFileInfo
+} from './backup-utils';
