@@ -44,7 +44,7 @@ export interface Dependency {
     priority?: number;
     
     /** Whether this is a hard or soft dependency */
-    type?: DependencyType;
+    type?: DependencyTypeType;
     
     /** Custom tags for categorization */
     tags?: string[];
