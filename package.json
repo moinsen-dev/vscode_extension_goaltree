@@ -41,10 +41,106 @@
         "icon": "$(plus)"
       },
       {
+        "command": "goalTree.createSubGoal",
+        "title": "Add Sub-goal",
+        "category": "Goal Tree",
+        "icon": "$(plus)"
+      },
+      {
+        "command": "goalTree.addTask",
+        "title": "Add Task",
+        "category": "Goal Tree",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "goalTree.editGoal",
+        "title": "Edit Goal",
+        "category": "Goal Tree",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "goalTree.editTask",
+        "title": "Edit Task",
+        "category": "Goal Tree",
+        "icon": "$(edit)"
+      },
+      {
         "command": "goalTree.deleteGoal",
         "title": "Delete Goal",
         "category": "Goal Tree",
         "icon": "$(trash)"
+      },
+      {
+        "command": "goalTree.deleteTask",
+        "title": "Delete Task",
+        "category": "Goal Tree",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "goalTree.duplicateGoal",
+        "title": "Duplicate Goal",
+        "category": "Goal Tree",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "goalTree.markInProgress",
+        "title": "Mark as In Progress",
+        "category": "Goal Tree",
+        "icon": "$(play)"
+      },
+      {
+        "command": "goalTree.markCompleted",
+        "title": "Mark as Completed",
+        "category": "Goal Tree",
+        "icon": "$(check)"
+      },
+      {
+        "command": "goalTree.markBlocked",
+        "title": "Mark as Blocked",
+        "category": "Goal Tree",
+        "icon": "$(stop)"
+      },
+      {
+        "command": "goalTree.markPlanned",
+        "title": "Mark as Planned",
+        "category": "Goal Tree",
+        "icon": "$(circle-outline)"
+      },
+      {
+        "command": "goalTree.toggleTask",
+        "title": "Toggle Task Status",
+        "category": "Goal Tree",
+        "icon": "$(check)"
+      },
+      {
+        "command": "goalTree.moveTaskUp",
+        "title": "Move Task Up",
+        "category": "Goal Tree",
+        "icon": "$(arrow-up)"
+      },
+      {
+        "command": "goalTree.moveTaskDown",
+        "title": "Move Task Down",
+        "category": "Goal Tree",
+        "icon": "$(arrow-down)"
+      },
+      {
+        "command": "goalTree.addDependency",
+        "title": "Add Dependency",
+        "category": "Goal Tree",
+        "icon": "$(link)"
+      },
+      {
+        "command": "goalTree.removeDependency",
+        "title": "Remove Dependency",
+        "category": "Goal Tree",
+        "icon": "$(unlink)"
+      },
+      {
+        "command": "goalTree.showDependencies",
+        "title": "Show Dependencies",
+        "category": "Goal Tree",
+        "icon": "$(info)"
       },
       {
         "command": "goalTree.refreshView",
@@ -86,9 +182,89 @@
       ],
       "view/item/context": [
         {
+          "command": "goalTree.createSubGoal",
+          "when": "view == goalTreeView && viewItem =~ /^goal/",
+          "group": "1_create"
+        },
+        {
+          "command": "goalTree.addTask",
+          "when": "view == goalTreeView && viewItem =~ /^goal/",
+          "group": "1_create"
+        },
+        {
+          "command": "goalTree.editGoal",
+          "when": "view == goalTreeView && viewItem =~ /^goal/",
+          "group": "2_edit"
+        },
+        {
+          "command": "goalTree.editTask",
+          "when": "view == goalTreeView && viewItem =~ /^task/",
+          "group": "2_edit"
+        },
+        {
+          "command": "goalTree.duplicateGoal",
+          "when": "view == goalTreeView && viewItem =~ /^goal/",
+          "group": "2_edit"
+        },
+        {
+          "command": "goalTree.markPlanned",
+          "when": "view == goalTreeView && viewItem =~ /^goal/ && viewItem != goal_status-planned",
+          "group": "3_status"
+        },
+        {
+          "command": "goalTree.markInProgress",
+          "when": "view == goalTreeView && viewItem =~ /^goal/ && viewItem != goal_status-in-progress",
+          "group": "3_status"
+        },
+        {
+          "command": "goalTree.markCompleted",
+          "when": "view == goalTreeView && viewItem =~ /^goal/ && viewItem != goal_status-completed",
+          "group": "3_status"
+        },
+        {
+          "command": "goalTree.markBlocked",
+          "when": "view == goalTreeView && viewItem =~ /^goal/ && viewItem != goal_status-blocked",
+          "group": "3_status"
+        },
+        {
+          "command": "goalTree.toggleTask",
+          "when": "view == goalTreeView && viewItem =~ /^task/",
+          "group": "3_status"
+        },
+        {
+          "command": "goalTree.moveTaskUp",
+          "when": "view == goalTreeView && viewItem =~ /^task/",
+          "group": "4_move"
+        },
+        {
+          "command": "goalTree.moveTaskDown",
+          "when": "view == goalTreeView && viewItem =~ /^task/",
+          "group": "4_move"
+        },
+        {
+          "command": "goalTree.addDependency",
+          "when": "view == goalTreeView && viewItem =~ /^goal/",
+          "group": "5_depend"
+        },
+        {
+          "command": "goalTree.removeDependency",
+          "when": "view == goalTreeView && viewItem =~ /^goal/",
+          "group": "5_depend"
+        },
+        {
+          "command": "goalTree.showDependencies",
+          "when": "view == goalTreeView && viewItem =~ /^goal/",
+          "group": "5_depend"
+        },
+        {
           "command": "goalTree.deleteGoal",
-          "when": "view == goalTreeView",
-          "group": "inline"
+          "when": "view == goalTreeView && viewItem =~ /^goal/",
+          "group": "9_delete"
+        },
+        {
+          "command": "goalTree.deleteTask",
+          "when": "view == goalTreeView && viewItem =~ /^task/",
+          "group": "9_delete"
         }
       ]
     },
@@ -114,6 +290,33 @@
             "objective"
           ],
           "description": "Default type when creating new goals"
+        },
+        "goalTree.sortByTitle": {
+          "type": "boolean",
+          "default": false,
+          "description": "Sort goals alphabetically by title instead of by creation date"
+        },
+        "goalTree.groupByStatus": {
+          "type": "boolean",
+          "default": false,
+          "description": "Group goals by their status in the tree view"
+        },
+        "goalTree.persistViewState": {
+          "type": "boolean",
+          "default": true,
+          "description": "Remember expanded/collapsed state of tree items between sessions"
+        },
+        "goalTree.showTaskCounts": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show task counts in goal labels"
+        },
+        "goalTree.maxDepth": {
+          "type": "number",
+          "default": 10,
+          "minimum": 1,
+          "maximum": 20,
+          "description": "Maximum depth of goal hierarchy to display"
         }
       }
     }

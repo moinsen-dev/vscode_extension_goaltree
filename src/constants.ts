@@ -180,25 +180,70 @@ export const CONTEXT_VALUES = {
     // Additional contexts
     HAS_TASKS: 'has-tasks',
     HAS_CHILDREN: 'has-children',
-    IS_BLOCKED: 'blocked'
+    IS_BLOCKED: 'blocked',
+    
+    // Priority contexts
+    HIGH_PRIORITY: 'high-priority',
+    MEDIUM_PRIORITY: 'medium-priority',
+    LOW_PRIORITY: 'low-priority',
+    
+    // Urgency contexts
+    URGENT: 'urgent',
+    OVERDUE: 'overdue',
+    HAS_DEPENDENCIES: 'has-dependencies'
 } as const;
 
 // Icons (VS Code built-in icons)
 export const ICONS = {
-    // Goal status icons
+    // Goal status icons (standard)
     GOAL_PLANNED: '$(circle-outline)',
     GOAL_IN_PROGRESS: '$(play)',
     GOAL_BLOCKED: '$(stop)',
     GOAL_COMPLETED: '$(check)',
     
-    // Task status icons
+    // Goal status icons (enhanced)
+    GOAL_PLANNED_PRIORITY: '$(circle-large-outline)',
+    GOAL_IN_PROGRESS_PRIORITY: '$(play)',
+    GOAL_BLOCKED_DEPENDENCY: '$(debug-disconnect)',
+    GOAL_BLOCKED_ERROR: '$(error)',
+    GOAL_COMPLETED_SUCCESS: '$(pass)',
+    
+    // Task status icons (standard)
     TASK_TODO: '$(circle-outline)',
     TASK_IN_PROGRESS: '$(play)',
     TASK_DONE: '$(check)',
     
+    // Task status icons (enhanced)
+    TASK_TODO_SMALL: '$(circle-small)',
+    TASK_IN_PROGRESS_CIRCLE: '$(play-circle)',
+    TASK_DONE_ALL: '$(check-all)',
+    
+    // Priority indicators
+    PRIORITY_HIGHEST: '$(flame)',
+    PRIORITY_HIGH: '$(triangle-up)',
+    PRIORITY_MEDIUM: '$(dash)',
+    PRIORITY_LOW: '$(triangle-down)',
+    PRIORITY_LOWEST: '$(circle-small)',
+    
+    // Progress indicators
+    PROGRESS_FULL: '$(check-all)',
+    PROGRESS_PARTIAL: '$(loading)',
+    PROGRESS_EMPTY: '$(circle-outline)',
+    PROGRESS_BAR_FULL: '$(chrome-maximize)',
+    PROGRESS_BAR_PARTIAL: '$(chrome-restore)',
+    
+    // Status indicators
+    STATUS_URGENT: '$(clock)',
+    STATUS_OVERDUE: '$(warning)',
+    STATUS_BLOCKED: '$(lock)',
+    STATUS_DEPENDENCY: '$(link)',
+    STATUS_SUCCESS: '$(pass)',
+    STATUS_IN_PROGRESS: '$(sync)',
+    
     // Tree structure icons
     FOLDER: '$(folder)',
     LIST: '$(list-unordered)',
+    HIERARCHY: '$(list-tree)',
     
     // Action icons
     ADD: '$(plus)',
@@ -217,7 +262,12 @@ export const ICONS = {
     SORT: '$(arrow-up)',
     WARNING: '$(warning)',
     ERROR: '$(error)',
-    INFO: '$(info)'
+    INFO: '$(info)',
+    
+    // Theme-aware indicators
+    LIGHT_MODE: '$(light-bulb)',
+    DARK_MODE: '$(circle-filled)',
+    AUTO_MODE: '$(eye)'
 } as const;
 
 // Colors (VS Code theme colors)

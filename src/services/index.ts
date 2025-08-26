@@ -19,6 +19,13 @@ export { StorageService } from './storageService';
 export { StateManager } from './stateManager';
 export { DependencyService } from './dependencyService';
 
+// Stream 2: Dependency Resolution Services
+export { 
+    DependencyResolver, 
+    createDependencyResolver,
+    type DependencyResolverConfig 
+} from './DependencyResolver';
+
 // Stream C: Storage Service Core components
 export { WorkspaceManager } from './workspace-manager';
 export { 

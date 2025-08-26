@@ -410,7 +410,7 @@ export class BackupUtils {
      * Gets the backup directory path
      */
     static async getBackupDirectory(): Promise<vscode.Uri> {
-        const workspaceDir = await WorkspaceManager.getWorkspaceStorageDir();
+        const workspaceDir = await WorkspaceManager.getStorageDirectory();
         if (!workspaceDir) {
             throw new Error('Cannot determine workspace storage directory');
         }
@@ -538,7 +538,8 @@ export class BackupUtils {
             let availableSpace: number | undefined;
             try {
                 const backupDir = await this.getBackupDirectory();
-                const stats = await fs.statfs ? fs.statfs(backupDir.fsPath) : undefined;
+                // Note: fs.statfs is not available in Node.js, fallback to undefined
+                const stats = undefined;
                 if (stats && 'available' in stats) {
                     availableSpace = (stats as any).available;
                 }

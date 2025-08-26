@@ -102,3 +102,21 @@ export {
   type BackupRotationPolicy,
   type BackupFileInfo
 } from './backup-utils';
+
+// Stream 2: Graph algorithms and circular dependency detection utilities
+export {
+  GraphAlgorithms,
+  createGraphAlgorithms
+} from './GraphAlgorithms';
+
+export {
+  CircularDependencyDetector,
+  createCircularDependencyDetector,
+  CycleUtils,
+  type CycleDetectionResult,
+  type CycleDetail,
+  type CycleBreakingSuggestion,
+  type CycleDetectorConfig,
+  CycleSeverity,
+  SuggestionType
+} from './CircularDependencyDetector';

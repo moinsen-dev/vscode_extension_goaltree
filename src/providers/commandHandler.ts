@@ -125,17 +125,44 @@ export class CommandHandler {
 
         try {
             await this.goalManager.createGoal(title.trim(), description?.trim(), parentGoal?.id);
+            this.treeProvider.refresh();
             vscode.window.showInformationMessage(`Goal "${title}" created successfully`);
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to create goal: ${error}`);
         }
     }
 
-    private async createSubGoal(parentGoal: Goal): Promise<void> {
+    private async createSubGoal(treeItem?: any): Promise<void> {
+        // Handle tree item context or direct goal parameter
+        let parentGoal: Goal | undefined;
+        
+        if (treeItem && typeof treeItem === 'object' && 'id' in treeItem) {
+            // Called from context menu with tree item
+            parentGoal = this.stateManager.getGoal(treeItem.id);
+        } else if (treeItem && typeof treeItem === 'object' && 'title' in treeItem) {
+            // Called directly with Goal object
+            parentGoal = treeItem as Goal;
+        }
+        
         await this.createGoal(parentGoal);
     }
 
-    private async editGoal(goal: Goal): Promise<void> {
+    private async editGoal(treeItemOrGoal: any): Promise<void> {
+        // Extract goal from tree item or use direct goal parameter
+        let goal: Goal | undefined;
+        
+        if (treeItemOrGoal && typeof treeItemOrGoal === 'object' && 'id' in treeItemOrGoal) {
+            // Called from context menu with tree item
+            goal = this.stateManager.getGoal(treeItemOrGoal.id);
+        } else if (treeItemOrGoal && typeof treeItemOrGoal === 'object' && 'title' in treeItemOrGoal) {
+            // Called directly with Goal object
+            goal = treeItemOrGoal as Goal;
+        }
+        
+        if (!goal) {
+            vscode.window.showErrorMessage('Goal not found');
+            return;
+        }
         const title = await vscode.window.showInputBox({
             prompt: 'Edit goal title',
             value: goal.title,
@@ -160,13 +187,29 @@ export class CommandHandler {
             };
 
             await this.goalManager.updateGoal(goal.id, updates);
+            this.treeProvider.refresh();
             vscode.window.showInformationMessage(`Goal "${title}" updated successfully`);
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to update goal: ${error}`);
         }
     }
 
-    private async deleteGoal(goal: Goal): Promise<void> {
+    private async deleteGoal(treeItemOrGoal: any): Promise<void> {
+        // Extract goal from tree item or use direct goal parameter
+        let goal: Goal | undefined;
+        
+        if (treeItemOrGoal && typeof treeItemOrGoal === 'object' && 'id' in treeItemOrGoal) {
+            // Called from context menu with tree item
+            goal = this.stateManager.getGoal(treeItemOrGoal.id);
+        } else if (treeItemOrGoal && typeof treeItemOrGoal === 'object' && 'title' in treeItemOrGoal) {
+            // Called directly with Goal object
+            goal = treeItemOrGoal as Goal;
+        }
+        
+        if (!goal) {
+            vscode.window.showErrorMessage('Goal not found');
+            return;
+        }
         const childGoals = this.stateManager.getChildGoals(goal.id);
         const hasChildren = childGoals.length > 0 || goal.tasks.length > 0;
         
@@ -186,13 +229,29 @@ export class CommandHandler {
 
         try {
             await this.goalManager.deleteGoal(goal.id);
+            this.treeProvider.refresh();
             vscode.window.showInformationMessage(`Goal "${goal.title}" deleted successfully`);
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to delete goal: ${error}`);
         }
     }
 
-    private async duplicateGoal(goal: Goal): Promise<void> {
+    private async duplicateGoal(treeItemOrGoal: any): Promise<void> {
+        // Extract goal from tree item or use direct goal parameter
+        let goal: Goal | undefined;
+        
+        if (treeItemOrGoal && typeof treeItemOrGoal === 'object' && 'id' in treeItemOrGoal) {
+            // Called from context menu with tree item
+            goal = this.stateManager.getGoal(treeItemOrGoal.id);
+        } else if (treeItemOrGoal && typeof treeItemOrGoal === 'object' && 'title' in treeItemOrGoal) {
+            // Called directly with Goal object
+            goal = treeItemOrGoal as Goal;
+        }
+        
+        if (!goal) {
+            vscode.window.showErrorMessage('Goal not found');
+            return;
+        }
         const newTitle = await vscode.window.showInputBox({
             prompt: 'Enter title for duplicated goal',
             value: `${goal.title} (Copy)`,
@@ -209,6 +268,7 @@ export class CommandHandler {
                 goal.description,
                 goal.parentId
             );
+            this.treeProvider.refresh();
             vscode.window.showInformationMessage(`Goal "${newTitle}" duplicated successfully`);
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to duplicate goal: ${error}`);
@@ -217,25 +277,38 @@ export class CommandHandler {
 
     // Goal Status Commands
 
-    private async markInProgress(goal: Goal): Promise<void> {
-        await this.updateGoalStatus(goal, 'in-progress');
+    private async markInProgress(treeItemOrGoal: any): Promise<void> {
+        const goal = this.extractGoalFromTreeItem(treeItemOrGoal);
+        if (goal) {
+            await this.updateGoalStatus(goal, 'in-progress');
+        }
     }
 
-    private async markCompleted(goal: Goal): Promise<void> {
-        await this.updateGoalStatus(goal, 'completed');
+    private async markCompleted(treeItemOrGoal: any): Promise<void> {
+        const goal = this.extractGoalFromTreeItem(treeItemOrGoal);
+        if (goal) {
+            await this.updateGoalStatus(goal, 'completed');
+        }
     }
 
-    private async markBlocked(goal: Goal): Promise<void> {
-        await this.updateGoalStatus(goal, 'blocked');
+    private async markBlocked(treeItemOrGoal: any): Promise<void> {
+        const goal = this.extractGoalFromTreeItem(treeItemOrGoal);
+        if (goal) {
+            await this.updateGoalStatus(goal, 'blocked');
+        }
     }
 
-    private async markPlanned(goal: Goal): Promise<void> {
-        await this.updateGoalStatus(goal, 'planned');
+    private async markPlanned(treeItemOrGoal: any): Promise<void> {
+        const goal = this.extractGoalFromTreeItem(treeItemOrGoal);
+        if (goal) {
+            await this.updateGoalStatus(goal, 'planned');
+        }
     }
 
     private async updateGoalStatus(goal: Goal, status: Goal['status']): Promise<void> {
         try {
             await this.goalManager.updateGoal(goal.id, { status });
+            this.treeProvider.refresh();
             vscode.window.showInformationMessage(`Goal "${goal.title}" marked as ${status}`);
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to update goal status: ${error}`);
@@ -244,7 +317,13 @@ export class CommandHandler {
 
     // Task Management Commands
 
-    private async addTask(goal: Goal): Promise<void> {
+    private async addTask(treeItemOrGoal: any): Promise<void> {
+        // Extract goal from tree item or use direct goal parameter
+        const goal = this.extractGoalFromTreeItem(treeItemOrGoal);
+        if (!goal) {
+            vscode.window.showErrorMessage('Goal not found');
+            return;
+        }
         const title = await vscode.window.showInputBox({
             prompt: 'Enter task title',
             placeHolder: 'Task title...',
@@ -257,13 +336,20 @@ export class CommandHandler {
 
         try {
             await this.goalManager.addTask(goal.id, title.trim());
+            this.treeProvider.refresh();
             vscode.window.showInformationMessage(`Task "${title}" added to goal "${goal.title}"`);
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to add task: ${error}`);
         }
     }
 
-    private async editTask(goal: Goal, task: Task): Promise<void> {
+    private async editTask(treeItem: any): Promise<void> {
+        // Extract task and goal from tree item
+        const { goal, task } = this.extractTaskFromTreeItem(treeItem);
+        if (!goal || !task) {
+            vscode.window.showErrorMessage('Task or goal not found');
+            return;
+        }
         const title = await vscode.window.showInputBox({
             prompt: 'Edit task title',
             value: task.title,
@@ -276,13 +362,20 @@ export class CommandHandler {
 
         try {
             await this.goalManager.updateTask(goal.id, task.id, { title: title.trim() });
+            this.treeProvider.refresh();
             vscode.window.showInformationMessage(`Task "${title}" updated successfully`);
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to update task: ${error}`);
         }
     }
 
-    private async deleteTask(goal: Goal, task: Task): Promise<void> {
+    private async deleteTask(treeItem: any): Promise<void> {
+        // Extract task and goal from tree item
+        const { goal, task } = this.extractTaskFromTreeItem(treeItem);
+        if (!goal || !task) {
+            vscode.window.showErrorMessage('Task or goal not found');
+            return;
+        }
         const choice = await vscode.window.showWarningMessage(
             `Delete task "${task.title}"?`,
             'Delete',
@@ -293,17 +386,37 @@ export class CommandHandler {
 
         try {
             await this.goalManager.removeTask(goal.id, task.id);
+            this.treeProvider.refresh();
             vscode.window.showInformationMessage(`Task "${task.title}" deleted successfully`);
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to delete task: ${error}`);
         }
     }
 
-    private async toggleTask(goal: Goal, task: Task): Promise<void> {
+    private async toggleTask(treeItemOrGoalId: any, taskId?: string): Promise<void> {
+        let goal: Goal | undefined;
+        let task: Task | undefined;
+        
+        if (typeof treeItemOrGoalId === 'string' && taskId) {
+            // Called with goalId and taskId parameters (from click command)
+            goal = this.stateManager.getGoal(treeItemOrGoalId);
+            task = goal?.tasks.find(t => t.id === taskId);
+        } else {
+            // Called from context menu with tree item
+            const result = this.extractTaskFromTreeItem(treeItemOrGoalId);
+            goal = result.goal;
+            task = result.task;
+        }
+        
+        if (!goal || !task) {
+            vscode.window.showErrorMessage('Task or goal not found');
+            return;
+        }
         const newStatus: Task['status'] = task.status === 'done' ? 'todo' : 'done';
         
         try {
             await this.goalManager.updateTask(goal.id, task.id, { status: newStatus });
+            this.treeProvider.refresh();
             const statusText = newStatus === 'done' ? 'completed' : 'reopened';
             vscode.window.showInformationMessage(`Task "${task.title}" ${statusText}`);
         } catch (error) {
@@ -311,22 +424,36 @@ export class CommandHandler {
         }
     }
 
-    private async moveTaskUp(goal: Goal, task: Task): Promise<void> {
+    private async moveTaskUp(treeItem: any): Promise<void> {
+        // Extract task and goal from tree item
+        const { goal, task } = this.extractTaskFromTreeItem(treeItem);
+        if (!goal || !task) {
+            vscode.window.showErrorMessage('Task or goal not found');
+            return;
+        }
         if (task.order === 0) return; // Already at top
 
         try {
             await this.goalManager.reorderTasks(goal.id, task.id, task.order - 1);
+            this.treeProvider.refresh();
             vscode.window.showInformationMessage(`Task "${task.title}" moved up`);
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to move task: ${error}`);
         }
     }
 
-    private async moveTaskDown(goal: Goal, task: Task): Promise<void> {
+    private async moveTaskDown(treeItem: any): Promise<void> {
+        // Extract task and goal from tree item
+        const { goal, task } = this.extractTaskFromTreeItem(treeItem);
+        if (!goal || !task) {
+            vscode.window.showErrorMessage('Task or goal not found');
+            return;
+        }
         if (task.order >= goal.tasks.length - 1) return; // Already at bottom
 
         try {
             await this.goalManager.reorderTasks(goal.id, task.id, task.order + 1);
+            this.treeProvider.refresh();
             vscode.window.showInformationMessage(`Task "${task.title}" moved down`);
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to move task: ${error}`);
@@ -335,7 +462,13 @@ export class CommandHandler {
 
     // Dependency Commands
 
-    private async addDependency(goal: Goal): Promise<void> {
+    private async addDependency(treeItemOrGoal: any): Promise<void> {
+        // Extract goal from tree item or use direct goal parameter
+        const goal = this.extractGoalFromTreeItem(treeItemOrGoal);
+        if (!goal) {
+            vscode.window.showErrorMessage('Goal not found');
+            return;
+        }
         const allGoals = this.stateManager.getAllGoals()
             .filter(g => g.id !== goal.id && g.status !== 'completed')
             .map(g => ({
@@ -359,7 +492,13 @@ export class CommandHandler {
         vscode.window.showInformationMessage(`Adding dependency: "${selected.goal.title}" blocks "${goal.title}"`);
     }
 
-    private async removeDependency(goal: Goal): Promise<void> {
+    private async removeDependency(treeItemOrGoal: any): Promise<void> {
+        // Extract goal from tree item or use direct goal parameter
+        const goal = this.extractGoalFromTreeItem(treeItemOrGoal);
+        if (!goal) {
+            vscode.window.showErrorMessage('Goal not found');
+            return;
+        }
         if (goal.blockedByIds.length === 0) {
             vscode.window.showInformationMessage('This goal has no dependencies to remove');
             return;
@@ -384,7 +523,13 @@ export class CommandHandler {
         vscode.window.showInformationMessage(`Removing dependency: "${selected.goal.title}" no longer blocks "${goal.title}"`);
     }
 
-    private async showDependencies(goal: Goal): Promise<void> {
+    private async showDependencies(treeItemOrGoal: any): Promise<void> {
+        // Extract goal from tree item or use direct goal parameter
+        const goal = this.extractGoalFromTreeItem(treeItemOrGoal);
+        if (!goal) {
+            vscode.window.showErrorMessage('Goal not found');
+            return;
+        }
         const blocking = goal.blockedByIds
             .map(id => this.stateManager.getGoal(id))
             .filter((g): g is Goal => g !== undefined);
@@ -485,5 +630,49 @@ export class CommandHandler {
         ].join('\n');
 
         vscode.window.showInformationMessage(message);
+    }
+
+    // Helper Methods
+
+    /**
+     * Extract Goal object from tree item or direct parameter
+     */
+    private extractGoalFromTreeItem(treeItemOrGoal: any): Goal | undefined {
+        if (!treeItemOrGoal) return undefined;
+        
+        if (typeof treeItemOrGoal === 'object') {
+            // Check if it's already a Goal object
+            if ('title' in treeItemOrGoal && 'status' in treeItemOrGoal && 'createdAt' in treeItemOrGoal) {
+                return treeItemOrGoal as Goal;
+            }
+            
+            // Check if it's a tree item with an ID
+            if ('id' in treeItemOrGoal && typeof treeItemOrGoal.id === 'string') {
+                return this.stateManager.getGoal(treeItemOrGoal.id);
+            }
+        }
+        
+        return undefined;
+    }
+
+    /**
+     * Extract Task and Goal objects from tree item
+     */
+    private extractTaskFromTreeItem(treeItem: any): { goal: Goal | undefined; task: Task | undefined } {
+        if (!treeItem || !('id' in treeItem)) {
+            return { goal: undefined, task: undefined };
+        }
+        
+        const treeItemId = treeItem.id as string;
+        
+        // Task tree items have format: "goalId:taskId"
+        if (treeItemId.includes(':')) {
+            const [goalId, taskId] = treeItemId.split(':');
+            const goal = this.stateManager.getGoal(goalId);
+            const task = goal?.tasks.find(t => t.id === taskId);
+            return { goal, task };
+        }
+        
+        return { goal: undefined, task: undefined };
     }
 }

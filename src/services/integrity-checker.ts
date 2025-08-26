@@ -190,7 +190,7 @@ export class IntegrityChecker {
                 warningIssues: 0,
                 infoIssues: 0,
                 issues: [{
-                    id: this.generateIssueId(),
+                    id: IntegrityChecker.generateIssueId(),
                     severity: IntegritySeverity.CRITICAL,
                     category: IntegrityCategory.DATA_CORRUPTION,
                     field: 'system',
@@ -306,6 +306,7 @@ export class IntegrityChecker {
      * Validates backup files for integrity
      */
     static async validateBackupFiles(): Promise<{
+        totalBackups: number;
         validBackups: number;
         invalidBackups: number;
         corruptedBackups: BackupFileInfo[];
@@ -354,6 +355,7 @@ export class IntegrityChecker {
         }
 
         return {
+            totalBackups: validBackups + invalidBackups,
             validBackups,
             invalidBackups,
             corruptedBackups,
@@ -369,12 +371,12 @@ export class IntegrityChecker {
             // Use Stream B validation
             if (!ValidationUtils.isValidGoal(goal)) {
                 issues.push({
-                    id: this.generateIssueId(),
+                    id: IntegrityChecker.generateIssueId(),
                     severity: IntegritySeverity.ERROR,
                     category: IntegrityCategory.VALIDATION_ERROR,
                     field: 'goal',
                     message: 'Goal fails basic validation',
-                    goalId: goal.id,
+                    goalId: (goal as any).id || 'unknown',
                     autoRepairable: true,
                     suggestedFix: 'Sanitize and fix goal data'
                 });
@@ -383,7 +385,7 @@ export class IntegrityChecker {
             // Check individual fields
             if (!goal.id || goal.id.trim().length === 0) {
                 issues.push({
-                    id: this.generateIssueId(),
+                    id: IntegrityChecker.generateIssueId(),
                     severity: IntegritySeverity.CRITICAL,
                     category: IntegrityCategory.DATA_CORRUPTION,
                     field: 'id',
@@ -396,7 +398,7 @@ export class IntegrityChecker {
 
             if (!goal.title || goal.title.trim().length === 0) {
                 issues.push({
-                    id: this.generateIssueId(),
+                    id: IntegrityChecker.generateIssueId(),
                     severity: IntegritySeverity.ERROR,
                     category: IntegrityCategory.VALIDATION_ERROR,
                     field: 'title',
@@ -412,13 +414,13 @@ export class IntegrityChecker {
                 for (const task of goal.tasks) {
                     if (!ValidationUtils.isValidTask(task)) {
                         issues.push({
-                            id: this.generateIssueId(),
+                            id: IntegrityChecker.generateIssueId(),
                             severity: IntegritySeverity.ERROR,
                             category: IntegrityCategory.VALIDATION_ERROR,
                             field: 'task',
                             message: 'Task fails basic validation',
                             goalId: goal.id,
-                            taskId: task.id,
+                            taskId: (task as any).id || 'unknown',
                             autoRepairable: true,
                             suggestedFix: 'Sanitize and fix task data'
                         });
@@ -437,7 +439,7 @@ export class IntegrityChecker {
             if (goal.parentId) {
                 if (!goalIds.has(goal.parentId)) {
                     issues.push({
-                        id: this.generateIssueId(),
+                        id: IntegrityChecker.generateIssueId(),
                         severity: IntegritySeverity.ERROR,
                         category: IntegrityCategory.HIERARCHY_ISSUE,
                         field: 'parentId',
@@ -462,7 +464,7 @@ export class IntegrityChecker {
         const checkCircular = (goalId: string, path: string[]): void => {
             if (recursionStack.has(goalId)) {
                 issues.push({
-                    id: this.generateIssueId(),
+                    id: IntegrityChecker.generateIssueId(),
                     severity: IntegritySeverity.CRITICAL,
                     category: IntegrityCategory.HIERARCHY_ISSUE,
                     field: 'parentId',
@@ -504,7 +506,7 @@ export class IntegrityChecker {
                 for (const blockedById of goal.blockedByIds) {
                     if (!goalIds.has(blockedById)) {
                         issues.push({
-                            id: this.generateIssueId(),
+                            id: IntegrityChecker.generateIssueId(),
                             severity: IntegritySeverity.WARNING,
                             category: IntegrityCategory.REFERENCE_ERROR,
                             field: 'blockedByIds',
@@ -518,7 +520,7 @@ export class IntegrityChecker {
                     // Check for self-blocking
                     if (blockedById === goal.id) {
                         issues.push({
-                            id: this.generateIssueId(),
+                            id: IntegrityChecker.generateIssueId(),
                             severity: IntegritySeverity.ERROR,
                             category: IntegrityCategory.REFERENCE_ERROR,
                             field: 'blockedByIds',
@@ -545,7 +547,7 @@ export class IntegrityChecker {
         for (const [goalId, count] of goalIdCounts.entries()) {
             if (count > 1) {
                 issues.push({
-                    id: this.generateIssueId(),
+                    id: IntegrityChecker.generateIssueId(),
                     severity: IntegritySeverity.CRITICAL,
                     category: IntegrityCategory.CONSISTENCY_ERROR,
                     field: 'id',
@@ -570,7 +572,7 @@ export class IntegrityChecker {
                 for (const [taskId, count] of taskIdCounts.entries()) {
                     if (count > 1) {
                         issues.push({
-                            id: this.generateIssueId(),
+                            id: IntegrityChecker.generateIssueId(),
                             severity: IntegritySeverity.ERROR,
                             category: IntegrityCategory.CONSISTENCY_ERROR,
                             field: 'task.id',
@@ -589,7 +591,7 @@ export class IntegrityChecker {
         for (const goal of goals) {
             if (goal.completedAt && goal.createdAt && goal.completedAt < goal.createdAt) {
                 issues.push({
-                    id: this.generateIssueId(),
+                    id: IntegrityChecker.generateIssueId(),
                     severity: IntegritySeverity.WARNING,
                     category: IntegrityCategory.CONSISTENCY_ERROR,
                     field: 'completedAt',
@@ -604,7 +606,7 @@ export class IntegrityChecker {
                 for (const task of goal.tasks) {
                     if (task.completedAt && task.createdAt && task.completedAt < task.createdAt) {
                         issues.push({
-                            id: this.generateIssueId(),
+                            id: IntegrityChecker.generateIssueId(),
                             severity: IntegritySeverity.WARNING,
                             category: IntegrityCategory.CONSISTENCY_ERROR,
                             field: 'task.completedAt',
@@ -640,7 +642,7 @@ export class IntegrityChecker {
         for (const goal of goals) {
             if (goal.tasks && goal.tasks.length > 50) {
                 issues.push({
-                    id: this.generateIssueId(),
+                    id: IntegrityChecker.generateIssueId(),
                     severity: IntegritySeverity.INFO,
                     category: IntegrityCategory.PERFORMANCE_ISSUE,
                     field: 'tasks',
@@ -682,13 +684,13 @@ export class IntegrityChecker {
             const textsToCheck = [
                 { field: 'title', text: goal.title },
                 { field: 'description', text: goal.description }
-            ].filter(item => item.text);
+            ].filter((item): item is { field: string; text: string } => Boolean(item.text));
 
             for (const { field, text } of textsToCheck) {
                 for (const pattern of dangerousPatterns) {
                     if (pattern.test(text)) {
                         issues.push({
-                            id: this.generateIssueId(),
+                            id: IntegrityChecker.generateIssueId(),
                             severity: IntegritySeverity.WARNING,
                             category: IntegrityCategory.SECURITY_ISSUE,
                             field: field,
@@ -707,13 +709,13 @@ export class IntegrityChecker {
                     const taskTexts = [
                         { field: 'task.title', text: task.title },
                         { field: 'task.description', text: task.description }
-                    ].filter(item => item.text);
+                    ].filter((item): item is { field: string; text: string } => Boolean(item.text));
 
                     for (const { field, text } of taskTexts) {
                         for (const pattern of dangerousPatterns) {
                             if (pattern.test(text)) {
                                 issues.push({
-                                    id: this.generateIssueId(),
+                                    id: IntegrityChecker.generateIssueId(),
                                     severity: IntegritySeverity.WARNING,
                                     category: IntegrityCategory.SECURITY_ISSUE,
                                     field: field,
