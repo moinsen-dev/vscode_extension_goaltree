@@ -389,9 +389,10 @@ export const GoalEventUtils = {
     switch (event.type) {
       case GoalEventType.GOAL_CREATED:
       case GoalEventType.GOAL_UPDATED:
+        return event.data.goal?.id;
       case GoalEventType.GOAL_STATUS_CHANGED:
       case GoalEventType.GOAL_MOVED:
-        return event.data.goal?.id || event.data.goalId;
+        return event.data.goalId || event.data.goal?.id;
       case GoalEventType.GOAL_DELETED:
         return event.data.goalId;
       case GoalEventType.TASK_ADDED:

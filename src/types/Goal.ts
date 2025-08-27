@@ -5,6 +5,9 @@
 
 import { GoalStatus, GoalStatusType } from './GoalStatus';
 
+// Re-export GoalStatusType for use in other modules
+export { GoalStatus, GoalStatusType } from './GoalStatus';
+
 /**
  * Task status enumeration
  */

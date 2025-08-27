@@ -85,6 +85,19 @@ export {
     IntegrityCategory
 } from './integrity-checker';
 
+// Stream D: Event System & Integration components (Issue #4)
+export { 
+    EventManager, 
+    createEventManager 
+} from './EventManager';
+export { 
+    UndoRedoManager, 
+    createUndoRedoManager,
+    type UndoableCommand,
+    type CommandGroup,
+    type UndoRedoResult
+} from './UndoRedoManager';
+
 export type {
     BackupOptions,
     BackupSchedule,

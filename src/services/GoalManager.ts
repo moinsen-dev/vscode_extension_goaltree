@@ -1,9 +1,9 @@
 /**
- * GoalManager Service - Core CRUD operations and business logic
+ * GoalManager Service - Core CRUD operations and business logic with enhanced event system and undo/redo
  * 
  * This service implements all goal management operations including creation,
  * editing, deletion, status transitions, and hierarchical relationship management.
- * It provides proper validation, error handling, and event emission for tree view integration.
+ * It provides proper validation, error handling, enhanced event emission, and undo/redo capabilities.
  */
 
 import {
@@ -32,38 +32,266 @@ import {
     GoalEventHandler
 } from '../types';
 import { ValidationService } from './ValidationService';
+import { EventManager } from './EventManager';
+import { UndoRedoManager, UndoableCommand } from './UndoRedoManager';
 
 /**
- * Event listener interface for goal events
+ * Goal operation commands for undo/redo functionality
  */
-interface EventListener {
-    handler: GoalEventHandler;
-    once: boolean;
+class CreateGoalCommand implements UndoableCommand {
+    id: string;
+    description: string;
+    timestamp: Date;
+    affectedGoalIds: string[];
+    metadata?: Record<string, any>;
+
+    private goalManager: GoalManager;
+    private params: CreateGoalParams;
+    private createdGoal: Goal | null = null;
+
+    constructor(goalManager: GoalManager, params: CreateGoalParams) {
+        this.id = `create_goal_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+        this.description = `Create goal: ${params.title}`;
+        this.timestamp = new Date();
+        this.affectedGoalIds = [];
+        this.goalManager = goalManager;
+        this.params = params;
+    }
+
+    async execute(): Promise<void> {
+        this.createdGoal = await this.goalManager.createGoalDirect(this.params);
+        this.affectedGoalIds = [this.createdGoal.id];
+    }
+
+    async undo(): Promise<void> {
+        if (this.createdGoal) {
+            await this.goalManager.deleteGoalDirect(this.createdGoal.id);
+        }
+    }
+
+    canUndo(): boolean {
+        return this.createdGoal !== null;
+    }
+
+    canRedo(): boolean {
+        return true;
+    }
+}
+
+class UpdateGoalCommand implements UndoableCommand {
+    id: string;
+    description: string;
+    timestamp: Date;
+    affectedGoalIds: string[];
+    metadata?: Record<string, any>;
+
+    private goalManager: GoalManager;
+    private goalId: string;
+    private updates: UpdateGoalParams;
+    private previousState: Goal | null = null;
+
+    constructor(goalManager: GoalManager, goalId: string, updates: UpdateGoalParams) {
+        this.id = `update_goal_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+        this.description = `Update goal: ${updates.title || 'properties'}`;
+        this.timestamp = new Date();
+        this.affectedGoalIds = [goalId];
+        this.goalManager = goalManager;
+        this.goalId = goalId;
+        this.updates = updates;
+    }
+
+    async execute(): Promise<void> {
+        // Store previous state before updating
+        this.previousState = this.goalManager.getGoal(this.goalId);
+        if (!this.previousState) {
+            throw new Error(`Goal with id ${this.goalId} not found`);
+        }
+        this.previousState = { ...this.previousState }; // Deep copy
+
+        await this.goalManager.updateGoalDirect(this.goalId, this.updates);
+    }
+
+    async undo(): Promise<void> {
+        if (this.previousState) {
+            // Restore to previous state
+            const restoreUpdates: UpdateGoalParams = {
+                title: this.previousState.title,
+                description: this.previousState.description,
+                status: this.previousState.status,
+                parentId: this.previousState.parentId,
+                blockedByIds: this.previousState.blockedByIds,
+                metadata: this.previousState.metadata
+            };
+            await this.goalManager.updateGoalDirect(this.goalId, restoreUpdates);
+        }
+    }
+
+    canUndo(): boolean {
+        return this.previousState !== null;
+    }
+
+    canRedo(): boolean {
+        return true;
+    }
+}
+
+class DeleteGoalCommand implements UndoableCommand {
+    id: string;
+    description: string;
+    timestamp: Date;
+    affectedGoalIds: string[];
+    metadata?: Record<string, any>;
+
+    private goalManager: GoalManager;
+    private goalId: string;
+    private deletedGoal: Goal | null = null;
+    private deletedChildren: Goal[] = [];
+
+    constructor(goalManager: GoalManager, goalId: string) {
+        this.id = `delete_goal_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+        this.description = `Delete goal`;
+        this.timestamp = new Date();
+        this.affectedGoalIds = [goalId];
+        this.goalManager = goalManager;
+        this.goalId = goalId;
+    }
+
+    async execute(): Promise<void> {
+        this.deletedGoal = this.goalManager.getGoal(this.goalId);
+        if (!this.deletedGoal) {
+            throw new Error(`Goal with id ${this.goalId} not found`);
+        }
+        
+        this.description = `Delete goal: ${this.deletedGoal.title}`;
+        this.deletedGoal = { ...this.deletedGoal }; // Deep copy
+        
+        // Store children that will be deleted
+        this.deletedChildren = this.goalManager.getChildGoals(this.goalId);
+        
+        await this.goalManager.deleteGoalDirect(this.goalId);
+    }
+
+    async undo(): Promise<void> {
+        if (this.deletedGoal) {
+            // Recreate the goal
+            const params: CreateGoalParams = {
+                title: this.deletedGoal.title,
+                description: this.deletedGoal.description,
+                parentId: this.deletedGoal.parentId,
+                metadata: this.deletedGoal.metadata
+            };
+            
+            // Create with original ID (special case for undo)
+            await this.goalManager.recreateGoalWithId(this.deletedGoal.id, params, this.deletedGoal);
+            
+            // Recreate children
+            for (const child of this.deletedChildren) {
+                const childParams: CreateGoalParams = {
+                    title: child.title,
+                    description: child.description,
+                    parentId: child.parentId,
+                    metadata: child.metadata
+                };
+                await this.goalManager.recreateGoalWithId(child.id, childParams, child);
+            }
+        }
+    }
+
+    canUndo(): boolean {
+        return this.deletedGoal !== null;
+    }
+
+    canRedo(): boolean {
+        return true;
+    }
 }
 
 /**
- * GoalManager class handles all goal CRUD operations and business logic
+ * Enhanced GoalManager class with EventManager and UndoRedoManager integration
  */
 export class GoalManager {
     private goals: Map<string, Goal> = new Map();
     private validationService: ValidationService;
-    private eventListeners: Map<string, EventListener[]> = new Map();
+    private eventManager: EventManager;
+    private undoRedoManager: UndoRedoManager | null = null;
     private logger: (message: string) => void;
+    private isDisposed: boolean = false;
 
-    constructor(validationService?: ValidationService, logger?: (message: string) => void) {
+    constructor(
+        validationService?: ValidationService,
+        eventManager?: EventManager,
+        undoRedoManager?: UndoRedoManager,
+        logger?: (message: string) => void
+    ) {
         this.validationService = validationService || new ValidationService();
+        this.eventManager = eventManager || new EventManager();
+        this.undoRedoManager = undoRedoManager || null;
         this.logger = logger || ((message: string) => console.log(`GoalManager: ${message}`));
-        this.log('GoalManager initialized');
+        this.log('Enhanced GoalManager initialized');
     }
 
     // ===========================================
-    // Goal CRUD Operations
+    // Public Goal CRUD Operations (with undo/redo support)
     // ===========================================
 
     /**
-     * Create a new goal with validation and event emission
+     * Create a new goal with validation, event emission, and undo/redo support
      */
     async createGoal(params: CreateGoalParams): Promise<Goal> {
+        if (this.isDisposed) {
+            throw new Error('GoalManager has been disposed');
+        }
+
+        if (this.undoRedoManager) {
+            const command = new CreateGoalCommand(this, params);
+            await this.undoRedoManager.executeCommand(command);
+            return command['createdGoal']!;
+        } else {
+            return await this.createGoalDirect(params);
+        }
+    }
+
+    /**
+     * Update an existing goal with validation, event emission, and undo/redo support
+     */
+    async updateGoal(goalId: string, updates: UpdateGoalParams): Promise<Goal> {
+        if (this.isDisposed) {
+            throw new Error('GoalManager has been disposed');
+        }
+
+        if (this.undoRedoManager) {
+            const command = new UpdateGoalCommand(this, goalId, updates);
+            await this.undoRedoManager.executeCommand(command);
+            return this.getGoal(goalId)!;
+        } else {
+            return await this.updateGoalDirect(goalId, updates);
+        }
+    }
+
+    /**
+     * Delete a goal with validation, event emission, and undo/redo support
+     */
+    async deleteGoal(goalId: string): Promise<void> {
+        if (this.isDisposed) {
+            throw new Error('GoalManager has been disposed');
+        }
+
+        if (this.undoRedoManager) {
+            const command = new DeleteGoalCommand(this, goalId);
+            await this.undoRedoManager.executeCommand(command);
+        } else {
+            await this.deleteGoalDirect(goalId);
+        }
+    }
+
+    // ===========================================
+    // Direct Operations (internal, no undo/redo)
+    // ===========================================
+
+    /**
+     * Create a new goal directly (internal method)
+     */
+    async createGoalDirect(params: CreateGoalParams): Promise<Goal> {
         try {
             // Validate goal creation
             const validation = this.validationService.validateGoalCreation(params);
@@ -95,7 +323,7 @@ export class GoalManager {
             // Store the goal
             this.goals.set(goal.id, goal);
 
-            // Emit creation event
+            // Emit creation event via EventManager
             const event: GoalCreatedEvent = {
                 id: GoalEventUtils.generateEventId(),
                 type: GoalEventType.GOAL_CREATED,
@@ -103,7 +331,7 @@ export class GoalManager {
                 source: 'user',
                 data: { goal }
             };
-            await this.emitEvent(event);
+            await this.eventManager.emit(event);
 
             this.log(`Goal created: ${goal.title} (${goal.id})`);
             return goal;
@@ -115,9 +343,9 @@ export class GoalManager {
     }
 
     /**
-     * Update an existing goal with validation and status transition logic
+     * Update an existing goal directly (internal method)
      */
-    async updateGoal(goalId: string, updates: UpdateGoalParams): Promise<Goal> {
+    async updateGoalDirect(goalId: string, updates: UpdateGoalParams): Promise<Goal> {
         try {
             const existingGoal = this.goals.get(goalId);
             if (!existingGoal) {
@@ -175,7 +403,7 @@ export class GoalManager {
             // Store updated goal
             this.goals.set(goalId, updatedGoal);
 
-            // Emit update events
+            // Emit update events via EventManager
             const changes = this.getChangedFields(previousState, updatedGoal);
             
             const updateEvent: GoalUpdatedEvent = {
@@ -189,7 +417,7 @@ export class GoalManager {
                     changes
                 }
             };
-            await this.emitEvent(updateEvent);
+            await this.eventManager.emit(updateEvent);
 
             // Emit status change event if status changed
             if (updates.status && updates.status !== existingGoal.status) {
@@ -205,7 +433,7 @@ export class GoalManager {
                         goal: updatedGoal
                     }
                 };
-                await this.emitEvent(statusEvent);
+                await this.eventManager.emit(statusEvent);
             }
 
             // Emit move event if parent changed
@@ -222,7 +450,7 @@ export class GoalManager {
                         goal: updatedGoal
                     }
                 };
-                await this.emitEvent(moveEvent);
+                await this.eventManager.emit(moveEvent);
             }
 
             this.log(`Goal updated: ${updatedGoal.title} (${goalId})`);
@@ -235,9 +463,9 @@ export class GoalManager {
     }
 
     /**
-     * Delete a goal and all its children with proper cleanup
+     * Delete a goal directly (internal method)
      */
-    async deleteGoal(goalId: string): Promise<void> {
+    async deleteGoalDirect(goalId: string): Promise<void> {
         try {
             const goal = this.goals.get(goalId);
             if (!goal) {
@@ -255,7 +483,7 @@ export class GoalManager {
             
             // Delete children first
             for (const child of childGoals) {
-                await this.deleteGoal(child.id);
+                await this.deleteGoalDirect(child.id);
             }
 
             // Remove from blocked dependencies of other goals
@@ -264,7 +492,7 @@ export class GoalManager {
             // Remove the goal
             this.goals.delete(goalId);
 
-            // Emit deletion event
+            // Emit deletion event via EventManager
             const event: GoalDeletedEvent = {
                 id: GoalEventUtils.generateEventId(),
                 type: GoalEventType.GOAL_DELETED,
@@ -275,7 +503,7 @@ export class GoalManager {
                     goal
                 }
             };
-            await this.emitEvent(event);
+            await this.eventManager.emit(event);
 
             this.log(`Goal deleted: ${goal.title} (${goalId})`);
 
@@ -284,6 +512,44 @@ export class GoalManager {
             throw error;
         }
     }
+
+    /**
+     * Recreate a goal with specific ID (for undo operations)
+     */
+    async recreateGoalWithId(goalId: string, params: CreateGoalParams, originalGoal: Goal): Promise<Goal> {
+        // Validate goal creation
+        const validation = this.validationService.validateGoalCreation(params);
+        if (!validation.isValid) {
+            throw new Error(`Goal recreation validation failed: ${validation.errors.join(', ')}`);
+        }
+
+        // Recreate the goal with original properties
+        const goal: Goal = {
+            ...originalGoal,
+            id: goalId // Use specific ID
+        };
+
+        // Store the goal
+        this.goals.set(goal.id, goal);
+
+        // Emit creation event via EventManager
+        const event: GoalCreatedEvent = {
+            id: GoalEventUtils.generateEventId(),
+            type: GoalEventType.GOAL_CREATED,
+            timestamp: new Date(),
+            source: 'system', // Mark as system-generated (undo operation)
+            data: { goal },
+            metadata: { isUndoOperation: true }
+        };
+        await this.eventManager.emit(event);
+
+        this.log(`Goal recreated: ${goal.title} (${goal.id})`);
+        return goal;
+    }
+
+    // ===========================================
+    // Query Methods (unchanged from original)
+    // ===========================================
 
     /**
      * Get a goal by ID
@@ -314,7 +580,7 @@ export class GoalManager {
     }
 
     // ===========================================
-    // Task Operations
+    // Task Operations (enhanced with events)
     // ===========================================
 
     /**
@@ -346,7 +612,7 @@ export class GoalManager {
             goal.updatedAt = new Date();
             this.goals.set(goalId, goal);
 
-            // Emit task added event
+            // Emit task added event via EventManager
             const event: TaskAddedEvent = {
                 id: GoalEventUtils.generateEventId(),
                 type: GoalEventType.TASK_ADDED,
@@ -358,7 +624,7 @@ export class GoalManager {
                     goal
                 }
             };
-            await this.emitEvent(event);
+            await this.eventManager.emit(event);
 
             this.log(`Task added to goal ${goal.title}: ${task.title} (${task.id})`);
             return task;
@@ -407,7 +673,7 @@ export class GoalManager {
             goal.updatedAt = new Date();
             this.goals.set(goalId, goal);
 
-            // Emit task updated event
+            // Emit task updated event via EventManager
             const changes = this.getChangedFields(previousState, updatedTask);
             const updateEvent: TaskUpdatedEvent = {
                 id: GoalEventUtils.generateEventId(),
@@ -422,7 +688,7 @@ export class GoalManager {
                     goal
                 }
             };
-            await this.emitEvent(updateEvent);
+            await this.eventManager.emit(updateEvent);
 
             // Emit status change event if status changed
             if (updates.status && updates.status !== existingTask.status) {
@@ -440,7 +706,7 @@ export class GoalManager {
                         goal
                     }
                 };
-                await this.emitEvent(statusEvent);
+                await this.eventManager.emit(statusEvent);
             }
 
             this.log(`Task updated in goal ${goal.title}: ${updatedTask.title} (${taskId})`);
@@ -478,7 +744,7 @@ export class GoalManager {
             goal.updatedAt = new Date();
             this.goals.set(goalId, goal);
 
-            // Emit task deleted event
+            // Emit task deleted event via EventManager
             const event: TaskDeletedEvent = {
                 id: GoalEventUtils.generateEventId(),
                 type: GoalEventType.TASK_DELETED,
@@ -491,7 +757,7 @@ export class GoalManager {
                     goal
                 }
             };
-            await this.emitEvent(event);
+            await this.eventManager.emit(event);
 
             this.log(`Task deleted from goal ${goal.title}: ${task.title} (${taskId})`);
 
@@ -502,7 +768,7 @@ export class GoalManager {
     }
 
     // ===========================================
-    // Status Management
+    // Status Management (unchanged from original)
     // ===========================================
 
     /**
@@ -586,7 +852,7 @@ export class GoalManager {
     }
 
     // ===========================================
-    // Bulk Operations
+    // Bulk Operations (enhanced with events)
     // ===========================================
 
     /**
@@ -600,34 +866,51 @@ export class GoalManager {
             details: []
         };
 
-        for (const goalId of goalIds) {
-            try {
-                await this.updateGoal(goalId, { status: GoalStatus.COMPLETED });
-                result.successful++;
-                result.details.push({
-                    goalId,
-                    operation: 'complete',
-                    success: true
-                });
-            } catch (error) {
-                const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-                result.failed++;
-                result.errors.push(`${goalId}: ${errorMessage}`);
-                result.details.push({
-                    goalId,
-                    operation: 'complete',
-                    success: false,
-                    error: errorMessage
-                });
-            }
+        // Use command group for bulk operations if undo/redo is enabled
+        let groupId: string | null = null;
+        if (this.undoRedoManager) {
+            groupId = this.undoRedoManager.startCommandGroup(
+                `Bulk complete ${goalIds.length} goals`,
+                true
+            );
         }
 
-        this.log(`Bulk complete operation: ${result.successful} successful, ${result.failed} failed`);
-        return result;
+        try {
+            for (const goalId of goalIds) {
+                try {
+                    await this.updateGoal(goalId, { status: GoalStatus.COMPLETED });
+                    result.successful++;
+                    result.details.push({
+                        goalId,
+                        operation: 'complete',
+                        success: true
+                    });
+                } catch (error) {
+                    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                    result.failed++;
+                    result.errors.push(`${goalId}: ${errorMessage}`);
+                    result.details.push({
+                        goalId,
+                        operation: 'complete',
+                        success: false,
+                        error: errorMessage
+                    });
+                }
+            }
+
+            this.log(`Bulk complete operation: ${result.successful} successful, ${result.failed} failed`);
+            return result;
+
+        } finally {
+            // End command group if it was started
+            if (groupId && this.undoRedoManager) {
+                this.undoRedoManager.endCommandGroup();
+            }
+        }
     }
 
     // ===========================================
-    // Utility Methods
+    // Utility Methods (unchanged from original)
     // ===========================================
 
     /**
@@ -650,29 +933,121 @@ export class GoalManager {
     }
 
     // ===========================================
-    // Private Helper Methods
+    // Event System Integration
+    // ===========================================
+
+    /**
+     * Register an event listener with the EventManager
+     */
+    on<T extends GoalEvent>(
+        eventType: T['type'] | T['type'][],
+        handler: GoalEventHandler<T>,
+        options?: {
+            once?: boolean;
+            filter?: (event: T) => boolean;
+            priority?: number;
+        }
+    ): string {
+        return this.eventManager.on(eventType, handler, options);
+    }
+
+    /**
+     * Register a one-time event listener
+     */
+    once<T extends GoalEvent>(
+        eventType: T['type'],
+        handler: GoalEventHandler<T>,
+        options?: {
+            filter?: (event: T) => boolean;
+            priority?: number;
+        }
+    ): string {
+        return this.eventManager.once(eventType, handler, options);
+    }
+
+    /**
+     * Remove an event listener
+     */
+    off<T extends GoalEvent>(
+        eventType: T['type'] | T['type'][],
+        handler: GoalEventHandler<T>
+    ): void {
+        this.eventManager.off(eventType, handler);
+    }
+
+    /**
+     * Remove event listener by subscription ID
+     */
+    offById(subscriptionId: string): void {
+        this.eventManager.offById(subscriptionId);
+    }
+
+    // ===========================================
+    // Undo/Redo Integration
+    // ===========================================
+
+    /**
+     * Undo the last operation
+     */
+    async undo(): Promise<UndoRedoManager['undo'] extends (...args: any[]) => Promise<infer T> ? T : never> {
+        if (!this.undoRedoManager) {
+            throw new Error('Undo/Redo is not enabled');
+        }
+        return await this.undoRedoManager.undo();
+    }
+
+    /**
+     * Redo the last undone operation
+     */
+    async redo(): Promise<UndoRedoManager['redo'] extends (...args: any[]) => Promise<infer T> ? T : never> {
+        if (!this.undoRedoManager) {
+            throw new Error('Undo/Redo is not enabled');
+        }
+        return await this.undoRedoManager.redo();
+    }
+
+    /**
+     * Check if undo is possible
+     */
+    canUndo(): boolean {
+        return this.undoRedoManager ? this.undoRedoManager.canUndo() : false;
+    }
+
+    /**
+     * Check if redo is possible
+     */
+    canRedo(): boolean {
+        return this.undoRedoManager ? this.undoRedoManager.canRedo() : false;
+    }
+
+    /**
+     * Get undo description
+     */
+    getUndoDescription(): string | null {
+        return this.undoRedoManager ? this.undoRedoManager.getUndoDescription() : null;
+    }
+
+    /**
+     * Get redo description
+     */
+    getRedoDescription(): string | null {
+        return this.undoRedoManager ? this.undoRedoManager.getRedoDescription() : null;
+    }
+
+    /**
+     * Create a state snapshot for rollback operations
+     */
+    createSnapshot(description: string): string | null {
+        if (!this.undoRedoManager) return null;
+        return this.undoRedoManager.createSnapshot(description, this.goals);
+    }
+
+    // ===========================================
+    // Private Helper Methods (unchanged from original)
     // ===========================================
 
     private generateId(): string {
         return `goal_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-    }
-
-    private async emitEvent(event: GoalEvent): Promise<void> {
-        try {
-            const listeners = this.eventListeners.get(event.type) || [];
-            for (const listener of [...listeners]) {
-                try {
-                    await listener.handler(event);
-                    if (listener.once) {
-                        this.removeEventListener(event.type, listener.handler);
-                    }
-                } catch (error) {
-                    this.logError(`Event handler failed for ${event.type}`, error);
-                }
-            }
-        } catch (error) {
-            this.logError('Failed to emit event', error);
-        }
     }
 
     private async handleGoalCompletion(goalId: string): Promise<void> {
@@ -685,7 +1060,7 @@ export class GoalManager {
             // Check if goal can now be started
             const remainingBlockers = this.getBlockingGoals(goal.id);
             if (remainingBlockers.length === 0 && goal.status === GoalStatus.BLOCKED) {
-                await this.updateGoal(goal.id, { status: GoalStatus.PLANNED });
+                await this.updateGoalDirect(goal.id, { status: GoalStatus.PLANNED });
             }
         }
     }
@@ -738,53 +1113,6 @@ export class GoalManager {
         };
     }
 
-    // ===========================================
-    // Event Management Methods
-    // ===========================================
-
-    /**
-     * Add event listener for specific event type
-     */
-    on(eventType: string, handler: GoalEventHandler): void {
-        const listeners = this.eventListeners.get(eventType) || [];
-        listeners.push({ handler, once: false });
-        this.eventListeners.set(eventType, listeners);
-    }
-
-    /**
-     * Add one-time event listener
-     */
-    once(eventType: string, handler: GoalEventHandler): void {
-        const listeners = this.eventListeners.get(eventType) || [];
-        listeners.push({ handler, once: true });
-        this.eventListeners.set(eventType, listeners);
-    }
-
-    /**
-     * Remove event listener
-     */
-    off(eventType: string, handler: GoalEventHandler): void {
-        this.removeEventListener(eventType, handler);
-    }
-
-    private removeEventListener(eventType: string, handler: GoalEventHandler): void {
-        const listeners = this.eventListeners.get(eventType) || [];
-        const filteredListeners = listeners.filter(l => l.handler !== handler);
-        if (filteredListeners.length === 0) {
-            this.eventListeners.delete(eventType);
-        } else {
-            this.eventListeners.set(eventType, filteredListeners);
-        }
-    }
-
-    private removeAllListeners(): void {
-        this.eventListeners.clear();
-    }
-
-    // ===========================================
-    // Logging Methods
-    // ===========================================
-
     private log(message: string): void {
         this.logger(`${message}`);
     }
@@ -794,12 +1122,37 @@ export class GoalManager {
         this.logger(`ERROR: ${message} - ${errorMessage}`);
     }
 
+    // ===========================================
+    // Lifecycle Methods
+    // ===========================================
+
     /**
      * Dispose of resources
      */
     dispose(): void {
+        if (this.isDisposed) return;
+
         this.goals.clear();
-        this.removeAllListeners();
-        this.log('GoalManager disposed');
+        this.eventManager.dispose();
+        if (this.undoRedoManager) {
+            this.undoRedoManager.dispose();
+        }
+
+        this.isDisposed = true;
+        this.log('Enhanced GoalManager disposed');
+    }
+
+    /**
+     * Get access to the EventManager for advanced event operations
+     */
+    getEventManager(): EventManager {
+        return this.eventManager;
+    }
+
+    /**
+     * Get access to the UndoRedoManager for advanced undo/redo operations
+     */
+    getUndoRedoManager(): UndoRedoManager | null {
+        return this.undoRedoManager;
     }
 }
