@@ -15,7 +15,13 @@
  */
 
 export { GoalManager } from './goalManager';
-export { StorageService } from './storageService';
+export { StorageService, 
+         createStorageService, 
+         StorageServiceUtils,
+         type StorageConfig,
+         type StorageResult,
+         type DataChangeEvent,
+         type StorageMetadata } from './StorageService';
 export { StateManager } from './stateManager';
 export { DependencyService } from './dependencyService';
 
