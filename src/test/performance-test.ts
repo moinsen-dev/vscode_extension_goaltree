@@ -7,7 +7,7 @@ import * as vscode from 'vscode';
 import { Goal, Task } from '../models';
 import { StateManager } from '../services/stateManager';
 import { GoalManager } from '../services/goalManager';
-import { StorageService } from '../services/storageService';
+import { ValidationService } from '../services/ValidationService';
 import { DependencyService } from '../services/dependencyService';
 import { GoalTreeProvider } from '../providers/goalTreeProvider';
 import { createLogger, LogLevel } from '../utils/logger';
@@ -250,9 +250,9 @@ export class GoalTreePerformanceTest {
         // Setup services with test data
         const stateManager = new StateManager();
         const mockContext = {} as vscode.ExtensionContext; // Mock context for testing
-        const storageService = new StorageService(mockContext);
+        const validationService = new ValidationService();
         const dependencyService = new DependencyService(stateManager);
-        const goalManager = new GoalManager(storageService, stateManager, dependencyService);
+        const goalManager = new GoalManager(validationService);
         
         // Initialize with test data
         for (const goal of goals) {

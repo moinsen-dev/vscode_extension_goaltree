@@ -422,6 +422,68 @@
         "key": "ctrl+shift+g ctrl+e",
         "mac": "cmd+shift+g cmd+e",
         "when": "goalTree.enabled && view == goalTreeView"
+      },
+      {
+        "command": "goalTree.editGoal",
+        "key": "F2",
+        "when": "goalTree.enabled && view == goalTreeView && viewItem =~ /^goal/"
+      },
+      {
+        "command": "goalTree.editTask",
+        "key": "F2",
+        "when": "goalTree.enabled && view == goalTreeView && viewItem =~ /^task/"
+      },
+      {
+        "command": "goalTree.deleteGoal",
+        "key": "Delete",
+        "when": "goalTree.enabled && view == goalTreeView && viewItem =~ /^goal/"
+      },
+      {
+        "command": "goalTree.deleteTask",
+        "key": "Delete",
+        "when": "goalTree.enabled && view == goalTreeView && viewItem =~ /^task/"
+      },
+      {
+        "command": "goalTree.duplicateGoal",
+        "key": "ctrl+d",
+        "mac": "cmd+d",
+        "when": "goalTree.enabled && view == goalTreeView && viewItem =~ /^goal/"
+      },
+      {
+        "command": "goalTree.moveTaskUp",
+        "key": "ctrl+up",
+        "mac": "cmd+up",
+        "when": "goalTree.enabled && view == goalTreeView && viewItem =~ /^task/"
+      },
+      {
+        "command": "goalTree.moveTaskDown",
+        "key": "ctrl+down",
+        "mac": "cmd+down",
+        "when": "goalTree.enabled && view == goalTreeView && viewItem =~ /^task/"
+      },
+      {
+        "command": "goalTree.addDependency",
+        "key": "ctrl+shift+g d",
+        "mac": "cmd+shift+g d",
+        "when": "goalTree.enabled && view == goalTreeView && viewItem =~ /^goal/"
+      },
+      {
+        "command": "goalTree.showDependencies",
+        "key": "ctrl+shift+g ctrl+d",
+        "mac": "cmd+shift+g cmd+d",
+        "when": "goalTree.enabled && view == goalTreeView && viewItem =~ /^goal/"
+      },
+      {
+        "command": "goalTree.toggleShowCompleted",
+        "key": "ctrl+shift+g h",
+        "mac": "cmd+shift+g h",
+        "when": "goalTree.enabled && view == goalTreeView"
+      },
+      {
+        "command": "goalTree.toggleSortByTitle",
+        "key": "ctrl+shift+g s",
+        "mac": "cmd+shift+g s",
+        "when": "goalTree.enabled && view == goalTreeView"
       }
     ],
     "configuration": {

@@ -102,11 +102,11 @@ class UpdateGoalCommand implements UndoableCommand {
 
     async execute(): Promise<void> {
         // Store previous state before updating
-        this.previousState = this.goalManager.getGoal(this.goalId);
-        if (!this.previousState) {
+        const goal = this.goalManager.getGoal(this.goalId);
+        if (!goal) {
             throw new Error(`Goal with id ${this.goalId} not found`);
         }
-        this.previousState = { ...this.previousState }; // Deep copy
+        this.previousState = { ...goal }; // Deep copy
 
         await this.goalManager.updateGoalDirect(this.goalId, this.updates);
     }
@@ -157,7 +157,7 @@ class DeleteGoalCommand implements UndoableCommand {
     }
 
     async execute(): Promise<void> {
-        this.deletedGoal = this.goalManager.getGoal(this.goalId);
+        this.deletedGoal = this.goalManager.getGoal(this.goalId) ?? null;
         if (!this.deletedGoal) {
             throw new Error(`Goal with id ${this.goalId} not found`);
         }

@@ -30,7 +30,7 @@ import {
     DependencyStatusUtils
 } from '../types/DependencyStatus';
 import { DependencyGraph } from '../types/DependencyGraph';
-import { EnhancedGoal, GoalStatus } from '../types/Goal';
+import { Goal, GoalStatus } from '../types/Goal';
 import { DependencyResolver } from './DependencyResolver';
 import { StateManager } from './stateManager';
 import { CircularDependencyDetector, CycleDetectionResult } from '../utils/CircularDependencyDetector';
@@ -162,7 +162,7 @@ export interface GoalOperationValidation {
     operation: 'create' | 'update' | 'delete' | 'status_change';
     
     /** New values (for update/status_change operations) */
-    updates?: Partial<EnhancedGoal>;
+    updates?: Partial<Goal>;
     
     /** Validation context */
     context: ValidationContext;
@@ -359,7 +359,9 @@ export class DependencyValidator {
                             mainError = ruleResult.message;
                         }
                     } else if (ruleResult.impact === 'medium') {
-                        severity = Math.max(severity, ValidationSeverity.WARNING) as ValidationSeverity;
+                        if (severity === ValidationSeverity.INFO) {
+                            severity = ValidationSeverity.WARNING;
+                        }
                     }
                 }
                 
@@ -1170,7 +1172,7 @@ export class DependencyValidator {
      */
     private async validateGoalUpdate(
         goalId: string,
-        updates: Partial<EnhancedGoal>,
+        updates: Partial<Goal>,
         context: ValidationContext
     ): Promise<GoalOperationValidationResult> {
         // For most goal updates, dependency impact is minimal
@@ -1197,7 +1199,7 @@ export class DependencyValidator {
      * Validate goal creation
      */
     private async validateGoalCreation(
-        goalData: Partial<EnhancedGoal>,
+        goalData: Partial<Goal>,
         context: ValidationContext
     ): Promise<GoalOperationValidationResult> {
         // Goal creation typically doesn't affect existing dependencies

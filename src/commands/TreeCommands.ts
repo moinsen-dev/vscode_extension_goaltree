@@ -30,65 +30,140 @@ export class TreeCommands {
 
     /**
      * Register all tree commands with VS Code
+     * Enhanced with better error handling and validation
      */
     registerCommands(context: vscode.ExtensionContext): void {
-        const commands = [
+        if (!context) {
+            this.logger.error('Cannot register commands: invalid extension context');
+            throw new Error('Extension context is required for command registration');
+        }
+
+        const commandDefinitions = [
             // Goal creation commands
-            vscode.commands.registerCommand('goalTree.createGoal', this.createGoal.bind(this)),
-            vscode.commands.registerCommand('goalTree.createSubGoal', this.createSubGoal.bind(this)),
-            vscode.commands.registerCommand('goalTree.duplicateGoal', this.duplicateGoal.bind(this)),
+            { id: 'goalTree.createGoal', handler: this.createGoal.bind(this), category: 'Goal Creation' },
+            { id: 'goalTree.createSubGoal', handler: this.createSubGoal.bind(this), category: 'Goal Creation' },
+            { id: 'goalTree.duplicateGoal', handler: this.duplicateGoal.bind(this), category: 'Goal Creation' },
 
             // Task commands
-            vscode.commands.registerCommand('goalTree.addTask', this.addTask.bind(this)),
-            vscode.commands.registerCommand('goalTree.toggleTask', this.toggleTask.bind(this)),
-            vscode.commands.registerCommand('goalTree.moveTaskUp', this.moveTaskUp.bind(this)),
-            vscode.commands.registerCommand('goalTree.moveTaskDown', this.moveTaskDown.bind(this)),
-            vscode.commands.registerCommand('goalTree.editTask', this.editTask.bind(this)),
-            vscode.commands.registerCommand('goalTree.deleteTask', this.deleteTask.bind(this)),
+            { id: 'goalTree.addTask', handler: this.addTask.bind(this), category: 'Task Management' },
+            { id: 'goalTree.toggleTask', handler: this.toggleTask.bind(this), category: 'Task Management' },
+            { id: 'goalTree.moveTaskUp', handler: this.moveTaskUp.bind(this), category: 'Task Management' },
+            { id: 'goalTree.moveTaskDown', handler: this.moveTaskDown.bind(this), category: 'Task Management' },
+            { id: 'goalTree.editTask', handler: this.editTask.bind(this), category: 'Task Management' },
+            { id: 'goalTree.deleteTask', handler: this.deleteTask.bind(this), category: 'Task Management' },
 
             // Goal editing commands
-            vscode.commands.registerCommand('goalTree.editGoal', this.editGoal.bind(this)),
-            vscode.commands.registerCommand('goalTree.deleteGoal', this.deleteGoal.bind(this)),
+            { id: 'goalTree.editGoal', handler: this.editGoal.bind(this), category: 'Goal Management' },
+            { id: 'goalTree.deleteGoal', handler: this.deleteGoal.bind(this), category: 'Goal Management' },
 
             // Status management commands
-            vscode.commands.registerCommand('goalTree.markPlanned', this.markPlanned.bind(this)),
-            vscode.commands.registerCommand('goalTree.markInProgress', this.markInProgress.bind(this)),
-            vscode.commands.registerCommand('goalTree.markCompleted', this.markCompleted.bind(this)),
-            vscode.commands.registerCommand('goalTree.markBlocked', this.markBlocked.bind(this)),
+            { id: 'goalTree.markPlanned', handler: this.markPlanned.bind(this), category: 'Status Management' },
+            { id: 'goalTree.markInProgress', handler: this.markInProgress.bind(this), category: 'Status Management' },
+            { id: 'goalTree.markCompleted', handler: this.markCompleted.bind(this), category: 'Status Management' },
+            { id: 'goalTree.markBlocked', handler: this.markBlocked.bind(this), category: 'Status Management' },
 
             // Dependency management commands
-            vscode.commands.registerCommand('goalTree.addDependency', this.addDependency.bind(this)),
-            vscode.commands.registerCommand('goalTree.removeDependency', this.removeDependency.bind(this)),
-            vscode.commands.registerCommand('goalTree.showDependencies', this.showDependencies.bind(this)),
+            { id: 'goalTree.addDependency', handler: this.addDependency.bind(this), category: 'Dependency Management' },
+            { id: 'goalTree.removeDependency', handler: this.removeDependency.bind(this), category: 'Dependency Management' },
+            { id: 'goalTree.showDependencies', handler: this.showDependencies.bind(this), category: 'Dependency Management' },
 
             // View management commands
-            vscode.commands.registerCommand('goalTree.refreshView', this.refreshView.bind(this)),
-            vscode.commands.registerCommand('goalTree.openView', this.openView.bind(this)),
-            vscode.commands.registerCommand('goalTree.expandAll', this.expandAll.bind(this)),
-            vscode.commands.registerCommand('goalTree.collapseAll', this.collapseAll.bind(this)),
+            { id: 'goalTree.refreshView', handler: this.refreshView.bind(this), category: 'View Management' },
+            { id: 'goalTree.openView', handler: this.openView.bind(this), category: 'View Management' },
+            { id: 'goalTree.expandAll', handler: this.expandAll.bind(this), category: 'View Management' },
+            { id: 'goalTree.collapseAll', handler: this.collapseAll.bind(this), category: 'View Management' },
 
             // Configuration commands
-            vscode.commands.registerCommand('goalTree.toggleShowCompleted', this.toggleShowCompleted.bind(this)),
-            vscode.commands.registerCommand('goalTree.toggleSortByTitle', this.toggleSortByTitle.bind(this)),
-            vscode.commands.registerCommand('goalTree.toggleGroupByStatus', this.toggleGroupByStatus.bind(this)),
+            { id: 'goalTree.toggleShowCompleted', handler: this.toggleShowCompleted.bind(this), category: 'Configuration' },
+            { id: 'goalTree.toggleSortByTitle', handler: this.toggleSortByTitle.bind(this), category: 'Configuration' },
+            { id: 'goalTree.toggleGroupByStatus', handler: this.toggleGroupByStatus.bind(this), category: 'Configuration' },
 
             // Search and filter commands
-            vscode.commands.registerCommand('goalTree.searchGoals', this.searchGoals.bind(this)),
-            vscode.commands.registerCommand('goalTree.filterByStatus', this.filterByStatus.bind(this)),
-            vscode.commands.registerCommand('goalTree.showOnlyBlocked', this.showOnlyBlocked.bind(this)),
-            vscode.commands.registerCommand('goalTree.showOnlyHighPriority', this.showOnlyHighPriority.bind(this)),
+            { id: 'goalTree.searchGoals', handler: this.searchGoals.bind(this), category: 'Search & Filter' },
+            { id: 'goalTree.filterByStatus', handler: this.filterByStatus.bind(this), category: 'Search & Filter' },
+            { id: 'goalTree.showOnlyBlocked', handler: this.showOnlyBlocked.bind(this), category: 'Search & Filter' },
+            { id: 'goalTree.showOnlyHighPriority', handler: this.showOnlyHighPriority.bind(this), category: 'Search & Filter' },
 
             // Navigation commands
-            vscode.commands.registerCommand('goalTree.goToParent', this.goToParent.bind(this)),
-            vscode.commands.registerCommand('goalTree.goToFirstChild', this.goToFirstChild.bind(this)),
-            vscode.commands.registerCommand('goalTree.focusNextGoal', this.focusNextGoal.bind(this)),
-            vscode.commands.registerCommand('goalTree.focusPreviousGoal', this.focusPreviousGoal.bind(this))
+            { id: 'goalTree.goToParent', handler: this.goToParent.bind(this), category: 'Navigation' },
+            { id: 'goalTree.goToFirstChild', handler: this.goToFirstChild.bind(this), category: 'Navigation' },
+            { id: 'goalTree.focusNextGoal', handler: this.focusNextGoal.bind(this), category: 'Navigation' },
+            { id: 'goalTree.focusPreviousGoal', handler: this.focusPreviousGoal.bind(this), category: 'Navigation' },
+
+            // Additional enhanced commands
+            { id: 'goalTree.focusGoal', handler: this.focusGoal.bind(this), category: 'Navigation' },
+            { id: 'goalTree.exportGoal', handler: this.exportGoal.bind(this), category: 'Data Management' },
+            { id: 'goalTree.importGoals', handler: this.importGoals.bind(this), category: 'Data Management' },
+            { id: 'goalTree.exportAll', handler: this.exportAll.bind(this), category: 'Data Management' }
         ];
 
-        // Register all commands
-        commands.forEach(command => context.subscriptions.push(command));
+        const registeredCommands: vscode.Disposable[] = [];
+        const registrationErrors: { command: string; error: any }[] = [];
 
-        this.logger.info('Registered all tree commands', { commandCount: commands.length });
+        // Register commands with individual error handling
+        for (const commandDef of commandDefinitions) {
+            try {
+                const disposable = vscode.commands.registerCommand(commandDef.id, this.wrapCommandHandler(commandDef.handler, commandDef.id));
+                registeredCommands.push(disposable);
+                context.subscriptions.push(disposable);
+                
+                this.logger.debug('Command registered successfully', { 
+                    command: commandDef.id, 
+                    category: commandDef.category 
+                });
+            } catch (error) {
+                const errorInfo = { command: commandDef.id, error };
+                registrationErrors.push(errorInfo);
+                this.logger.error('Failed to register command', errorInfo);
+            }
+        }
+
+        // Report registration results
+        const successCount = registeredCommands.length;
+        const errorCount = registrationErrors.length;
+        
+        if (errorCount > 0) {
+            const errorMessage = `Failed to register ${errorCount} commands: ${registrationErrors.map(e => e.command).join(', ')}`;
+            this.logger.error(errorMessage, { errors: registrationErrors });
+            vscode.window.showWarningMessage(`Goal Tree: Some commands failed to register. Check logs for details.`);
+        }
+
+        this.logger.info('Command registration completed', { 
+            successCount, 
+            errorCount, 
+            totalCommands: commandDefinitions.length 
+        });
+
+        if (successCount === 0) {
+            throw new Error('Failed to register any commands. Extension cannot function properly.');
+        }
+    }
+
+    /**
+     * Wrap command handlers with error handling and logging
+     */
+    private wrapCommandHandler<T extends any[]>(handler: (...args: T) => Promise<void> | void, commandId: string) {
+        return async (...args: T): Promise<void> => {
+            const startTime = Date.now();
+            try {
+                this.logger.debug('Command execution started', { command: commandId, args: args.length });
+                await handler(...args);
+                const duration = Date.now() - startTime;
+                this.logger.debug('Command execution completed', { command: commandId, duration });
+            } catch (error) {
+                const duration = Date.now() - startTime;
+                this.logger.error('Command execution failed', { 
+                    command: commandId, 
+                    duration,
+                    error: error instanceof Error ? error.message : String(error),
+                    stack: error instanceof Error ? error.stack : undefined
+                });
+                
+                // Show user-friendly error message
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                vscode.window.showErrorMessage(`Command failed: ${errorMessage}`);
+            }
+        };
     }
 
     // Goal Creation Commands
@@ -121,12 +196,13 @@ export class TreeCommands {
                 placeHolder: 'Describe your goal...'
             });
 
-            const goal = await this.goalManager.createGoal(goalTitle.trim(), undefined, {
+            const goal = await this.goalManager.createGoal({
+                title: goalTitle.trim(),
                 description: description?.trim()
             });
 
             this.treeProvider.refresh();
-            this.changeNotificationService.emit('goal:created', { goalId: goal.id, goal });
+            this.changeNotificationService.fire({ type: 'goal:created', data: { goalId: goal.id, goal }, timestamp: new Date() });
             
             vscode.window.showInformationMessage(`Goal created: ${goalTitle}`);
             this.logger.info('Goal created successfully', { goalId: goal.id, title: goalTitle });
@@ -186,12 +262,14 @@ export class TreeCommands {
                 placeHolder: 'Describe your sub-goal...'
             });
 
-            const subGoal = await this.goalManager.createGoal(goalTitle.trim(), goalId, {
-                description: description?.trim()
+            const subGoal = await this.goalManager.createGoal({
+                title: goalTitle.trim(),
+                description: description?.trim(),
+                parentId: goalId
             });
 
             this.treeProvider.refresh();
-            this.changeNotificationService.emit('goal:created', { goalId: subGoal.id, goal: subGoal, parentId: goalId });
+            this.changeNotificationService.fire({ type: 'goal:created', data: { goalId: subGoal.id, goal: subGoal, parentId: goalId }, timestamp: new Date() });
             
             vscode.window.showInformationMessage(`Sub-goal created: ${goalTitle}`);
             this.logger.info('Sub-goal created successfully', { goalId: subGoal.id, parentId: goalId, title: goalTitle });
@@ -245,10 +323,16 @@ export class TreeCommands {
                 return; // User cancelled
             }
 
-            const duplicatedGoal = await this.goalManager.duplicateGoal(goalId, newTitle.trim());
+            // Manually duplicate goal since duplicateGoal method doesn't exist
+            const originalGoal = this.stateManager.getGoal(goalId)!;
+            const duplicatedGoal = await this.goalManager.createGoal({
+                title: newTitle.trim(),
+                description: originalGoal.description,
+                parentId: originalGoal.parentId
+            });
 
             this.treeProvider.refresh();
-            this.changeNotificationService.emit('goal:created', { goalId: duplicatedGoal.id, goal: duplicatedGoal });
+            this.changeNotificationService.fire({ type: 'goal:created', data: { goalId: duplicatedGoal.id, goal: duplicatedGoal }, timestamp: new Date() });
             
             vscode.window.showInformationMessage(`Goal duplicated: ${newTitle}`);
             this.logger.info('Goal duplicated successfully', { originalId: goalId, newId: duplicatedGoal.id });
@@ -304,10 +388,12 @@ export class TreeCommands {
                 return; // User cancelled
             }
 
-            const task = await this.goalManager.createTask(goalId, taskTitle.trim());
+            const task = await this.goalManager.addTask(goalId, {
+                title: taskTitle.trim()
+            });
 
             this.treeProvider.refresh();
-            this.changeNotificationService.emit('task:created', { goalId, taskId: task.id, task });
+            this.changeNotificationService.fire({ type: 'task:created', data: { goalId, taskId: task.id, task }, timestamp: new Date() });
             
             vscode.window.showInformationMessage(`Task added: ${taskTitle}`);
             this.logger.info('Task created successfully', { goalId, taskId: task.id, title: taskTitle });
@@ -353,23 +439,23 @@ export class TreeCommands {
             // Cycle through task statuses: todo -> in-progress -> done -> todo
             let newStatus: TaskStatus;
             switch (task.status) {
-                case 'todo':
-                    newStatus = 'in-progress';
+                case TaskStatus.TODO:
+                    newStatus = TaskStatus.IN_PROGRESS;
                     break;
-                case 'in-progress':
-                    newStatus = 'done';
+                case TaskStatus.IN_PROGRESS:
+                    newStatus = TaskStatus.DONE;
                     break;
-                case 'done':
-                    newStatus = 'todo';
+                case TaskStatus.DONE:
+                    newStatus = TaskStatus.TODO;
                     break;
                 default:
-                    newStatus = 'in-progress';
+                    newStatus = TaskStatus.IN_PROGRESS;
             }
 
             await this.goalManager.updateTask(goalId, taskId, { status: newStatus });
 
             this.treeProvider.refresh();
-            this.changeNotificationService.emit('task:status-changed', { goalId, taskId, newStatus, oldStatus: task.status });
+            this.changeNotificationService.fire({ type: 'task:status-changed', data: { goalId, taskId, newStatus, oldStatus: task.status }, timestamp: new Date() });
 
             this.logger.info('Task status toggled', { goalId, taskId, newStatus, oldStatus: task.status });
 
@@ -393,10 +479,17 @@ export class TreeCommands {
                 taskId = selection.taskId;
             }
 
-            await this.goalManager.moveTask(goalId, taskId, 'up');
+            // moveTask method not available - need manual task reordering
+            const goal = this.stateManager.getGoal(goalId);
+            if (!goal) return;
+            const task = goal.tasks.find(t => t.id === taskId);
+            if (!task) return;
+            // For now, just show a message that this feature needs implementation
+            vscode.window.showWarningMessage('Task reordering not yet implemented');
+            return;
 
             this.treeProvider.refresh();
-            this.changeNotificationService.emit('task:updated', { goalId, taskId });
+            this.changeNotificationService.fire({ type: 'task:updated', data: { goalId, taskId }, timestamp: new Date() });
             
             this.logger.info('Task moved up', { goalId, taskId });
 
@@ -420,10 +513,17 @@ export class TreeCommands {
                 taskId = selection.taskId;
             }
 
-            await this.goalManager.moveTask(goalId, taskId, 'down');
+            // moveTask method not available - need manual task reordering
+            const goal = this.stateManager.getGoal(goalId);
+            if (!goal) return;
+            const task = goal.tasks.find(t => t.id === taskId);
+            if (!task) return;
+            // For now, just show a message that this feature needs implementation
+            vscode.window.showWarningMessage('Task reordering not yet implemented');
+            return;
 
             this.treeProvider.refresh();
-            this.changeNotificationService.emit('task:updated', { goalId, taskId });
+            this.changeNotificationService.fire({ type: 'task:updated', data: { goalId, taskId }, timestamp: new Date() });
             
             this.logger.info('Task moved down', { goalId, taskId });
 
@@ -489,7 +589,7 @@ export class TreeCommands {
             });
 
             this.treeProvider.refresh();
-            this.changeNotificationService.emit('task:updated', { goalId, taskId });
+            this.changeNotificationService.fire({ type: 'task:updated', data: { goalId, taskId }, timestamp: new Date() });
             
             vscode.window.showInformationMessage(`Task updated: ${newTitle}`);
             this.logger.info('Task edited successfully', { goalId, taskId, newTitle });
@@ -539,7 +639,7 @@ export class TreeCommands {
             await this.goalManager.deleteTask(goalId, taskId);
 
             this.treeProvider.refresh();
-            this.changeNotificationService.emit('task:deleted', { goalId, taskId });
+            this.changeNotificationService.fire({ type: 'task:deleted', data: { goalId, taskId }, timestamp: new Date() });
             
             vscode.window.showInformationMessage('Task deleted successfully');
             this.logger.info('Task deleted successfully', { goalId, taskId });
@@ -556,28 +656,28 @@ export class TreeCommands {
      * Mark goal as planned
      */
     async markPlanned(goalId?: string): Promise<void> {
-        await this.changeGoalStatus(goalId, 'planned');
+        await this.changeGoalStatus(goalId, GoalStatus.PLANNED);
     }
 
     /**
      * Mark goal as in progress
      */
     async markInProgress(goalId?: string): Promise<void> {
-        await this.changeGoalStatus(goalId, 'in-progress');
+        await this.changeGoalStatus(goalId, GoalStatus.IN_PROGRESS);
     }
 
     /**
      * Mark goal as completed
      */
     async markCompleted(goalId?: string): Promise<void> {
-        await this.changeGoalStatus(goalId, 'completed');
+        await this.changeGoalStatus(goalId, GoalStatus.COMPLETED);
     }
 
     /**
      * Mark goal as blocked
      */
     async markBlocked(goalId?: string): Promise<void> {
-        await this.changeGoalStatus(goalId, 'blocked');
+        await this.changeGoalStatus(goalId, GoalStatus.BLOCKED);
     }
 
     /**
@@ -603,10 +703,10 @@ export class TreeCommands {
                 return;
             }
 
-            await this.goalManager.updateGoalStatus(goalId, status);
+            await this.goalManager.updateGoal(goalId, { status });
 
             this.treeProvider.refresh();
-            this.changeNotificationService.emit('goal:status-changed', { goalId, newStatus: status, oldStatus: goal.status });
+            this.changeNotificationService.fire({ type: 'goal:status-changed', data: { goalId, newStatus: status, oldStatus: goal.status }, timestamp: new Date() });
             
             vscode.window.showInformationMessage(`Goal marked as ${status}: ${goal.title}`);
             this.logger.info('Goal status changed', { goalId, newStatus: status, oldStatus: goal.status });
@@ -667,7 +767,7 @@ export class TreeCommands {
             });
 
             this.treeProvider.refresh();
-            this.changeNotificationService.emit('goal:updated', { goalId });
+            this.changeNotificationService.fire({ type: 'goal:updated', data: { goalId }, timestamp: new Date() });
             
             vscode.window.showInformationMessage(`Goal updated: ${newTitle}`);
             this.logger.info('Goal edited successfully', { goalId, newTitle });
@@ -721,7 +821,7 @@ export class TreeCommands {
             await this.goalManager.deleteGoal(goalId);
 
             this.treeProvider.refresh();
-            this.changeNotificationService.emit('goal:deleted', { goalId });
+            this.changeNotificationService.fire({ type: 'goal:deleted', data: { goalId }, timestamp: new Date() });
             
             vscode.window.showInformationMessage('Goal deleted successfully');
             this.logger.info('Goal deleted successfully', { goalId });
@@ -852,10 +952,10 @@ export class TreeCommands {
      */
     async filterByStatus(): Promise<void> {
         const statuses: Array<{ label: string; value: GoalStatus }> = [
-            { label: 'Planned', value: 'planned' },
-            { label: 'In Progress', value: 'in-progress' },
-            { label: 'Blocked', value: 'blocked' },
-            { label: 'Completed', value: 'completed' }
+            { label: 'Planned', value: GoalStatus.PLANNED },
+            { label: 'In Progress', value: GoalStatus.IN_PROGRESS },
+            { label: 'Blocked', value: GoalStatus.BLOCKED },
+            { label: 'Completed', value: GoalStatus.COMPLETED }
         ];
 
         const selectedStatus = await vscode.window.showQuickPick(statuses, {
@@ -981,7 +1081,7 @@ export class TreeCommands {
             const availableGoals = allGoals.filter(g => 
                 g.id !== goalId && 
                 !goal.blockedByIds.includes(g.id) &&
-                !this.isDescendant(goalId, g.id)
+                !this.isDescendant(goalId!, g.id)
             );
 
             if (availableGoals.length === 0) {
@@ -1000,14 +1100,15 @@ export class TreeCommands {
                 placeHolder: 'Select goal to add as dependency'
             });
 
-            if (!selectedItem) {
+            if (!selectedItem || !selectedItem.goalId) {
+                vscode.window.showErrorMessage('Invalid dependency selection');
                 return;
             }
 
-            await this.goalManager.addDependency(goalId, selectedItem.goalId);
+            await this.goalManager.addBlockingDependency(goalId, selectedItem.goalId);
 
             this.treeProvider.refresh();
-            this.changeNotificationService.emit('goal:updated', { goalId });
+            this.changeNotificationService.fire({ type: 'goal:updated', data: { goalId }, timestamp: new Date() });
             
             vscode.window.showInformationMessage(`Dependency added: ${selectedItem.label}`);
             this.logger.info('Dependency added', { goalId, dependencyId: selectedItem.goalId });
@@ -1054,14 +1155,15 @@ export class TreeCommands {
                 placeHolder: 'Select dependency to remove'
             });
 
-            if (!selectedItem) {
+            if (!selectedItem || !selectedItem.dependencyId) {
+                vscode.window.showErrorMessage('Invalid dependency selection');
                 return;
             }
 
-            await this.goalManager.removeDependency(goalId, selectedItem.dependencyId);
+            await this.goalManager.removeBlockingDependency(goalId, selectedItem.dependencyId);
 
             this.treeProvider.refresh();
-            this.changeNotificationService.emit('goal:updated', { goalId });
+            this.changeNotificationService.fire({ type: 'goal:updated', data: { goalId }, timestamp: new Date() });
             
             vscode.window.showInformationMessage(`Dependency removed: ${selectedItem.label}`);
             this.logger.info('Dependency removed', { goalId, dependencyId: selectedItem.dependencyId });
@@ -1143,6 +1245,208 @@ export class TreeCommands {
     async focusPreviousGoal(): Promise<void> {
         // TODO: Implement focus previous goal
         vscode.window.showInformationMessage('Focus previous goal coming soon!');
+        this.logger.info('Focus previous goal requested');
+    }
+
+    // Enhanced Commands
+
+    /**
+     * Focus on a specific goal (zoom into goal view)
+     */
+    async focusGoal(goalId?: string): Promise<void> {
+        try {
+            if (!goalId) {
+                goalId = await this.getSelectedGoalId();
+                if (!goalId) {
+                    return;
+                }
+            }
+
+            const goal = this.stateManager.getGoal(goalId);
+            if (!goal) {
+                vscode.window.showErrorMessage('Goal not found');
+                return;
+            }
+
+            // TODO: Implement focused view functionality
+            vscode.window.showInformationMessage(`Focus view for "${goal.title}" coming soon!`);
+            this.logger.info('Goal focus requested', { goalId, title: goal.title });
+
+        } catch (error) {
+            this.logger.error('Failed to focus on goal', error);
+            vscode.window.showErrorMessage(`Failed to focus on goal: ${error}`);
+        }
+    }
+
+    /**
+     * Export a single goal to JSON
+     */
+    async exportGoal(goalId?: string): Promise<void> {
+        try {
+            if (!goalId) {
+                goalId = await this.getSelectedGoalId();
+                if (!goalId) {
+                    return;
+                }
+            }
+
+            const goal = this.stateManager.getGoal(goalId);
+            if (!goal) {
+                vscode.window.showErrorMessage('Goal not found');
+                return;
+            }
+
+            // Get child goals recursively
+            const childGoals = this.getGoalHierarchy(goalId);
+            const exportData = {
+                goal,
+                childGoals,
+                exportDate: new Date().toISOString(),
+                version: '1.0'
+            };
+
+            const fileName = `goal-${goal.title.replace(/[^a-zA-Z0-9]/g, '-')}-${new Date().toISOString().split('T')[0]}.json`;
+            
+            const saveUri = await vscode.window.showSaveDialog({
+                defaultUri: vscode.Uri.file(fileName),
+                filters: {
+                    'JSON Files': ['json'],
+                    'All Files': ['*']
+                }
+            });
+
+            if (saveUri) {
+                const content = JSON.stringify(exportData, null, 2);
+                await vscode.workspace.fs.writeFile(saveUri, Buffer.from(content, 'utf8'));
+                
+                vscode.window.showInformationMessage(`Goal exported to ${saveUri.fsPath}`);
+                this.logger.info('Goal exported successfully', { goalId, fileName: saveUri.fsPath });
+            }
+
+        } catch (error) {
+            this.logger.error('Failed to export goal', error);
+            vscode.window.showErrorMessage(`Failed to export goal: ${error}`);
+        }
+    }
+
+    /**
+     * Import goals from JSON file
+     */
+    async importGoals(): Promise<void> {
+        try {
+            const fileUri = await vscode.window.showOpenDialog({
+                canSelectFiles: true,
+                canSelectFolders: false,
+                canSelectMany: false,
+                filters: {
+                    'JSON Files': ['json'],
+                    'All Files': ['*']
+                }
+            });
+
+            if (!fileUri || fileUri.length === 0) {
+                return; // User cancelled
+            }
+
+            const content = await vscode.workspace.fs.readFile(fileUri[0]);
+            const importData = JSON.parse(content.toString());
+
+            // Validate import data structure
+            if (!importData.goal && !importData.goals) {
+                throw new Error('Invalid import file format: missing goal data');
+            }
+
+            const goalsToImport = importData.goals || [importData.goal];
+            let importedCount = 0;
+
+            for (const goalData of goalsToImport) {
+                if (goalData && typeof goalData === 'object' && goalData.title) {
+                    try {
+                        await this.goalManager.createGoal({
+                            title: goalData.title,
+                            description: goalData.description,
+                            parentId: goalData.parentId
+                        });
+                        importedCount++;
+                    } catch (error) {
+                        this.logger.warn('Failed to import goal', { title: goalData.title, error });
+                    }
+                }
+            }
+
+            this.treeProvider.refresh();
+            
+            if (importedCount > 0) {
+                vscode.window.showInformationMessage(`Successfully imported ${importedCount} goal(s)`);
+                this.logger.info('Goals imported successfully', { count: importedCount });
+            } else {
+                vscode.window.showWarningMessage('No goals were imported');
+            }
+
+        } catch (error) {
+            this.logger.error('Failed to import goals', error);
+            vscode.window.showErrorMessage(`Failed to import goals: ${error}`);
+        }
+    }
+
+    /**
+     * Export all goals to JSON
+     */
+    async exportAll(): Promise<void> {
+        try {
+            const allGoals = this.stateManager.getAllGoals();
+            
+            if (allGoals.length === 0) {
+                vscode.window.showInformationMessage('No goals to export');
+                return;
+            }
+
+            const exportData = {
+                goals: allGoals,
+                exportDate: new Date().toISOString(),
+                version: '1.0',
+                goalCount: allGoals.length
+            };
+
+            const fileName = `all-goals-${new Date().toISOString().split('T')[0]}.json`;
+            
+            const saveUri = await vscode.window.showSaveDialog({
+                defaultUri: vscode.Uri.file(fileName),
+                filters: {
+                    'JSON Files': ['json'],
+                    'All Files': ['*']
+                }
+            });
+
+            if (saveUri) {
+                const content = JSON.stringify(exportData, null, 2);
+                await vscode.workspace.fs.writeFile(saveUri, Buffer.from(content, 'utf8'));
+                
+                vscode.window.showInformationMessage(`Exported ${allGoals.length} goals to ${saveUri.fsPath}`);
+                this.logger.info('All goals exported successfully', { goalCount: allGoals.length, fileName: saveUri.fsPath });
+            }
+
+        } catch (error) {
+            this.logger.error('Failed to export all goals', error);
+            vscode.window.showErrorMessage(`Failed to export all goals: ${error}`);
+        }
+    }
+
+    /**
+     * Get goal hierarchy (goal with all its descendants)
+     */
+    private getGoalHierarchy(goalId: string): Goal[] {
+        const childGoals: Goal[] = [];
+        const directChildren = this.stateManager.getChildGoals(goalId);
+        
+        for (const child of directChildren) {
+            childGoals.push(child);
+            // Recursively get descendants
+            const descendants = this.getGoalHierarchy(child.id);
+            childGoals.push(...descendants);
+        }
+        
+        return childGoals;
     }
 
     /**

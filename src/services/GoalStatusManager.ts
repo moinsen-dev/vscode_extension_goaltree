@@ -273,13 +273,14 @@ export class GoalStatusManager {
       throw new Error(`Goal with ID ${goalId} not found`);
     }
 
+    const previousStatus: GoalStatusType = goal.status;
+    const wasCompleted = previousStatus === GoalStatus.COMPLETED;
+
     // Validate the transition
     const validation = this.validateStatusTransitionForGoal(goal, newStatus);
     if (!validation.isValid) {
       throw new Error(`Status transition failed: ${validation.error}`);
     }
-
-    const previousStatus = goal.status;
     const cascadedChanges: Array<{
       goalId: string;
       previousStatus: GoalStatusType;
@@ -293,7 +294,7 @@ export class GoalStatusManager {
     // Set completion timestamp if completing
     if (newStatus === GoalStatus.COMPLETED) {
       goal.completedAt = new Date();
-    } else if (previousStatus === GoalStatus.COMPLETED && newStatus !== GoalStatus.COMPLETED) {
+    } else if (wasCompleted && (newStatus as string) !== GoalStatus.COMPLETED) {
       // Clear completion timestamp if moving away from completed
       goal.completedAt = undefined;
     }

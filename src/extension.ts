@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { GoalManager, StateManager, StorageService, DependencyService, ChangeNotificationService } from './services';
+import { ValidationService } from './services/ValidationService';
 import { GoalTreeProvider, TreeContextMenuProvider } from './providers';
 import { TreeCommands } from './commands/TreeCommands';
 import { CONFIG_KEYS, STORAGE_KEYS } from './constants';
@@ -9,6 +10,7 @@ let goalManager: GoalManager;
 let stateManager: StateManager;
 let storageService: StorageService;
 let dependencyService: DependencyService;
+let validationService: ValidationService;
 let changeNotificationService: ChangeNotificationService;
 let goalTreeProvider: GoalTreeProvider;
 let treeContextMenuProvider: TreeContextMenuProvider;
@@ -19,7 +21,7 @@ let treeView: vscode.TreeView<string>;
 /**
  * Extension activation function - called when the extension is activated
  */
-export function activate(context: vscode.ExtensionContext): void {
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
 	console.log('Goal Tree extension is now active!');
 
 	// Store context for later use
@@ -29,7 +31,8 @@ export function activate(context: vscode.ExtensionContext): void {
 	storageService = new StorageService(context);
 	stateManager = new StateManager();
 	dependencyService = new DependencyService(stateManager);
-	goalManager = new GoalManager(storageService, stateManager, dependencyService);
+	validationService = new ValidationService();
+	goalManager = new GoalManager(validationService);
 	changeNotificationService = ChangeNotificationService.getInstance();
 
 	// Initialize tree components

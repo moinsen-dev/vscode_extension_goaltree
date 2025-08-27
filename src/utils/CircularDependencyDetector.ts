@@ -388,7 +388,7 @@ export class CircularDependencyDetector {
                 goalIds: cycle,
                 dependencies,
                 length: cycle.length,
-                severity,
+                severity: severity as CycleSeverity,
                 description,
                 breakingSuggestions,
                 impact
@@ -708,7 +708,7 @@ export class CircularDependencyDetector {
         let blockedGoalsCount = 0;
         for (const goalId of cycle) {
             for (const edge of graph.edges.values()) {
-                if (edge.blockingGoalId === goalId && edge.dependency.status === DependencyStatus.ACTIVE) {
+                if (edge.source === goalId && edge.dependency.status === DependencyStatus.ACTIVE) {
                     blockedGoalsCount++;
                 }
             }

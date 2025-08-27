@@ -532,7 +532,8 @@ export class GoalHierarchyManager {
     }
 
     if (criteria.maxDepth !== undefined) {
-      results = results.filter(goal => this.getGoalDepth(goal.id) <= criteria.maxDepth);
+      const maxDepth = criteria.maxDepth;
+      results = results.filter(goal => this.getGoalDepth(goal.id) <= maxDepth);
     }
 
     return results;

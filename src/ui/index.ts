@@ -6,7 +6,8 @@
 // Icon system
 export { 
   TreeIcons, 
-  IconUtils, 
+  IconUtils,
+  TreeIconsCompat,
   type IconConfig, 
   type IconTheme 
 } from './TreeIcons';
@@ -14,9 +15,13 @@ export {
 // Theme system
 export { 
   TreeThemes, 
-  ThemeUtils, 
+  ThemeUtils,
+  AccessibilityUtils,
   type ColorScheme, 
-  type ThemeConfig 
+  type ThemeConfig,
+  type EnhancedThemeConfig,
+  type ThemeChangeEvent,
+  type ThemeChangeListener
 } from './TreeThemes';
 
 // Demo and testing utilities

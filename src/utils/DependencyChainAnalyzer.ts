@@ -31,7 +31,7 @@ import {
     DependencyGraphEdge,
     DependencyPath
 } from '../types/DependencyGraph';
-import { EnhancedGoal, GoalStatus } from '../types/Goal';
+import { Goal, GoalStatus } from '../types/Goal';
 import { GraphAlgorithms } from './GraphAlgorithms';
 import { createLogger } from './logger';
 

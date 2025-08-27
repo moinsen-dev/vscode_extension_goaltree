@@ -6,7 +6,7 @@
  */
 
 import * as vscode from 'vscode';
-import { Goal, Task, GoalStatus, TaskStatus } from '../types/Goal';
+import { Goal, Task, GoalStatus, TaskStatus, TaskStatusType } from '../types/Goal';
 import { TREE_CONTEXT_VALUES } from '../types/TreeTypes';
 import { StateManager } from '../services/stateManager';
 import { GoalManager } from '../services/goalManager';
@@ -160,6 +160,18 @@ export class TreeContextMenuProvider {
                 title: 'Collapse All',
                 icon: 'collapse-all',
                 group: MENU_GROUPS.VIEW
+            },
+            {
+                command: 'goalTree.focusGoal',
+                title: 'Focus on Goal',
+                icon: 'target',
+                group: MENU_GROUPS.VIEW
+            },
+            {
+                command: 'goalTree.exportGoal',
+                title: 'Export Goal',
+                icon: 'export',
+                group: MENU_GROUPS.VIEW
             }
         );
 
@@ -260,10 +272,10 @@ export class TreeContextMenuProvider {
 
         // Add status change options (excluding current status)
         const statusOptions: Array<{status: GoalStatus, title: string, icon: string}> = [
-            { status: 'planned', title: 'Mark as Planned', icon: 'circle-outline' },
-            { status: 'in-progress', title: 'Mark as In Progress', icon: 'play' },
-            { status: 'completed', title: 'Mark as Completed', icon: 'check' },
-            { status: 'blocked', title: 'Mark as Blocked', icon: 'stop' }
+            { status: GoalStatus.PLANNED, title: 'Mark as Planned', icon: 'circle-outline' },
+            { status: GoalStatus.IN_PROGRESS, title: 'Mark as In Progress', icon: 'play' },
+            { status: GoalStatus.COMPLETED, title: 'Mark as Completed', icon: 'check' },
+            { status: GoalStatus.BLOCKED, title: 'Mark as Blocked', icon: 'stop' }
         ];
 
         statusOptions
@@ -296,9 +308,9 @@ export class TreeContextMenuProvider {
 
         // Add specific status options if different from current
         const statusOptions: Array<{status: TaskStatus, title: string, icon: string}> = [
-            { status: 'todo', title: 'Mark as To Do', icon: 'circle-outline' },
-            { status: 'in-progress', title: 'Mark as In Progress', icon: 'play' },
-            { status: 'done', title: 'Mark as Done', icon: 'check' }
+            { status: TaskStatus.TODO, title: 'Mark as To Do', icon: 'circle-outline' },
+            { status: TaskStatus.IN_PROGRESS, title: 'Mark as In Progress', icon: 'play' },
+            { status: TaskStatus.DONE, title: 'Mark as Done', icon: 'check' }
         ];
 
         statusOptions
@@ -318,13 +330,13 @@ export class TreeContextMenuProvider {
     /**
      * Get appropriate toggle title for task based on current status
      */
-    private getTaskToggleTitle(status: TaskStatus): string {
+    private getTaskToggleTitle(status: TaskStatusType): string {
         switch (status) {
-            case 'todo':
+            case TaskStatus.TODO:
                 return 'Start Task';
-            case 'in-progress':
+            case TaskStatus.IN_PROGRESS:
                 return 'Complete Task';
-            case 'done':
+            case TaskStatus.DONE:
                 return 'Reopen Task';
             default:
                 return 'Toggle Task';
@@ -334,13 +346,13 @@ export class TreeContextMenuProvider {
     /**
      * Get appropriate toggle icon for task based on current status
      */
-    private getTaskToggleIcon(status: TaskStatus): string {
+    private getTaskToggleIcon(status: TaskStatusType): string {
         switch (status) {
-            case 'todo':
+            case TaskStatus.TODO:
                 return 'play';
-            case 'in-progress':
+            case TaskStatus.IN_PROGRESS:
                 return 'check';
-            case 'done':
+            case TaskStatus.DONE:
                 return 'undo';
             default:
                 return 'check';
@@ -368,40 +380,145 @@ export class TreeContextMenuProvider {
     }
 
     /**
-     * Simple when clause evaluation for context menus
-     * This is a basic implementation - VS Code has more sophisticated when clause parsing
+     * Enhanced when clause evaluation for context menus
+     * Supports multiple operators and better error handling
      */
     private evaluateWhenClause(whenClause: string, contextValue: string): boolean {
         try {
-            // Handle simple patterns like "viewItem =~ /^goal/"
-            if (whenClause.includes('viewItem')) {
-                if (whenClause.includes('=~')) {
-                    // Regular expression match
-                    const match = whenClause.match(/viewItem\s*=~\s*\/(.+)\//);
+            // Sanitize inputs
+            if (!whenClause || typeof whenClause !== 'string') {
+                this.logger.warn('Invalid when clause provided', { whenClause });
+                return false;
+            }
+            
+            if (!contextValue || typeof contextValue !== 'string') {
+                this.logger.warn('Invalid context value provided', { contextValue });
+                return false;
+            }
+
+            const normalizedClause = whenClause.trim();
+            const normalizedContext = contextValue.trim();
+
+            // Handle viewItem clauses
+            if (normalizedClause.includes('viewItem')) {
+                if (normalizedClause.includes('=~')) {
+                    // Regular expression match with better error handling
+                    const match = normalizedClause.match(/viewItem\s*=~\s*\/(.+)\/([gimuy]*)/);
                     if (match) {
-                        const regex = new RegExp(match[1]);
-                        return regex.test(contextValue);
+                        try {
+                            const flags = match[2] || '';
+                            const regex = new RegExp(match[1], flags);
+                            const result = regex.test(normalizedContext);
+                            this.logger.debug('When clause regex evaluation', { 
+                                clause: normalizedClause, 
+                                context: normalizedContext, 
+                                result 
+                            });
+                            return result;
+                        } catch (regexError) {
+                            this.logger.error('Invalid regex in when clause', { 
+                                clause: normalizedClause, 
+                                regex: match[1], 
+                                error: regexError 
+                            });
+                            return false;
+                        }
                     }
-                } else if (whenClause.includes('==')) {
-                    // Exact match
-                    const match = whenClause.match(/viewItem\s*==\s*(.+)/);
+                } else if (normalizedClause.includes('==')) {
+                    // Exact match with quoted string support
+                    const match = normalizedClause.match(/viewItem\s*==\s*['"]?([^'"]+)['"]?/);
                     if (match) {
-                        return contextValue === match[1].trim();
+                        const result = normalizedContext === match[1].trim();
+                        this.logger.debug('When clause exact match evaluation', { 
+                            clause: normalizedClause, 
+                            context: normalizedContext, 
+                            expected: match[1].trim(),
+                            result 
+                        });
+                        return result;
                     }
-                } else if (whenClause.includes('!=')) {
-                    // Not equal match
-                    const match = whenClause.match(/viewItem\s*!=\s*(.+)/);
+                } else if (normalizedClause.includes('!=')) {
+                    // Not equal match with quoted string support
+                    const match = normalizedClause.match(/viewItem\s*!=\s*['"]?([^'"]+)['"]?/);
                     if (match) {
-                        return contextValue !== match[1].trim();
+                        const result = normalizedContext !== match[1].trim();
+                        this.logger.debug('When clause not-equal evaluation', { 
+                            clause: normalizedClause, 
+                            context: normalizedContext, 
+                            excluded: match[1].trim(),
+                            result 
+                        });
+                        return result;
+                    }
+                } else if (normalizedClause.includes('in')) {
+                    // Support for 'viewItem in (value1, value2)' syntax
+                    const match = normalizedClause.match(/viewItem\s+in\s*\(([^)]+)\)/);
+                    if (match) {
+                        const values = match[1].split(',').map(v => v.trim().replace(/['"]?([^'"]*)['"]?/, '$1'));
+                        const result = values.includes(normalizedContext);
+                        this.logger.debug('When clause in-list evaluation', { 
+                            clause: normalizedClause, 
+                            context: normalizedContext, 
+                            values,
+                            result 
+                        });
+                        return result;
                     }
                 }
             }
 
-            // Default to true for unsupported when clauses
+            // Handle logical operators (AND/OR)
+            if (normalizedClause.includes('&&') || normalizedClause.includes('||')) {
+                // Split by logical operators and evaluate recursively
+                if (normalizedClause.includes('&&')) {
+                    const parts = normalizedClause.split('&&').map(p => p.trim());
+                    const result = parts.every(part => this.evaluateWhenClause(part, normalizedContext));
+                    this.logger.debug('When clause AND evaluation', { 
+                        clause: normalizedClause, 
+                        context: normalizedContext, 
+                        parts,
+                        result 
+                    });
+                    return result;
+                } else if (normalizedClause.includes('||')) {
+                    const parts = normalizedClause.split('||').map(p => p.trim());
+                    const result = parts.some(part => this.evaluateWhenClause(part, normalizedContext));
+                    this.logger.debug('When clause OR evaluation', { 
+                        clause: normalizedClause, 
+                        context: normalizedContext, 
+                        parts,
+                        result 
+                    });
+                    return result;
+                }
+            }
+
+            // Handle negation
+            if (normalizedClause.startsWith('!')) {
+                const innerClause = normalizedClause.substring(1).trim();
+                const result = !this.evaluateWhenClause(innerClause, normalizedContext);
+                this.logger.debug('When clause negation evaluation', { 
+                    clause: normalizedClause, 
+                    context: normalizedContext, 
+                    innerClause,
+                    result 
+                });
+                return result;
+            }
+
+            // Log unsupported when clauses for debugging
+            this.logger.debug('Unsupported when clause, defaulting to true', { 
+                clause: normalizedClause, 
+                context: normalizedContext 
+            });
             return true;
         } catch (error) {
-            this.logger.warn('Error evaluating when clause', { whenClause, contextValue, error });
-            return true;
+            this.logger.error('Error evaluating when clause', { 
+                whenClause, 
+                contextValue, 
+                error: error instanceof Error ? error.message : String(error)
+            });
+            return false;
         }
     }
 
@@ -552,6 +669,12 @@ export class TreeContextMenuProvider {
                 group: 'navigation'
             },
             {
+                command: 'goalTree.searchGoals',
+                title: 'Search Goals',
+                icon: 'search',
+                group: 'navigation'
+            },
+            {
                 command: 'goalTree.expandAll',
                 title: 'Expand All',
                 icon: 'expand-all',
@@ -574,6 +697,36 @@ export class TreeContextMenuProvider {
                 title: 'Sort by Title',
                 icon: 'sort-precedence',
                 group: 'view'
+            },
+            {
+                command: 'goalTree.toggleGroupByStatus',
+                title: 'Group by Status',
+                icon: 'group-by-ref-type',
+                group: 'view'
+            },
+            {
+                command: 'goalTree.filterByStatus',
+                title: 'Filter by Status',
+                icon: 'filter',
+                group: 'filter'
+            },
+            {
+                command: 'goalTree.showOnlyBlocked',
+                title: 'Show Only Blocked',
+                icon: 'stop',
+                group: 'filter'
+            },
+            {
+                command: 'goalTree.importGoals',
+                title: 'Import Goals',
+                icon: 'cloud-download',
+                group: 'management'
+            },
+            {
+                command: 'goalTree.exportAll',
+                title: 'Export All',
+                icon: 'cloud-upload',
+                group: 'management'
             }
         ];
     }

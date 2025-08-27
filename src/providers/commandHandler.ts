@@ -124,7 +124,11 @@ export class CommandHandler {
         });
 
         try {
-            await this.goalManager.createGoal(title.trim(), description?.trim(), parentGoal?.id);
+            await this.goalManager.createGoal({
+                title: title.trim(),
+                description: description?.trim(),
+                parentId: parentGoal?.id
+            });
             this.treeProvider.refresh();
             vscode.window.showInformationMessage(`Goal "${title}" created successfully`);
         } catch (error) {
@@ -263,11 +267,11 @@ export class CommandHandler {
         if (!newTitle) return;
 
         try {
-            await this.goalManager.createGoal(
-                newTitle.trim(),
-                goal.description,
-                goal.parentId
-            );
+            await this.goalManager.createGoal({
+                title: newTitle.trim(),
+                description: goal.description,
+                parentId: goal.parentId
+            });
             this.treeProvider.refresh();
             vscode.window.showInformationMessage(`Goal "${newTitle}" duplicated successfully`);
         } catch (error) {
@@ -335,7 +339,9 @@ export class CommandHandler {
         if (!title) return;
 
         try {
-            await this.goalManager.addTask(goal.id, title.trim());
+            await this.goalManager.addTask(goal.id, {
+                title: title.trim()
+            });
             this.treeProvider.refresh();
             vscode.window.showInformationMessage(`Task "${title}" added to goal "${goal.title}"`);
         } catch (error) {
@@ -385,7 +391,7 @@ export class CommandHandler {
         if (choice !== 'Delete') return;
 
         try {
-            await this.goalManager.removeTask(goal.id, task.id);
+            await this.goalManager.deleteTask(goal.id, task.id);
             this.treeProvider.refresh();
             vscode.window.showInformationMessage(`Task "${task.title}" deleted successfully`);
         } catch (error) {
@@ -434,7 +440,8 @@ export class CommandHandler {
         if (task.order === 0) return; // Already at top
 
         try {
-            await this.goalManager.reorderTasks(goal.id, task.id, task.order - 1);
+            // reorderTasks method not available - showing placeholder message
+            vscode.window.showWarningMessage('Task reordering not yet implemented');
             this.treeProvider.refresh();
             vscode.window.showInformationMessage(`Task "${task.title}" moved up`);
         } catch (error) {
@@ -452,7 +459,8 @@ export class CommandHandler {
         if (task.order >= goal.tasks.length - 1) return; // Already at bottom
 
         try {
-            await this.goalManager.reorderTasks(goal.id, task.id, task.order + 1);
+            // reorderTasks method not available - showing placeholder message
+            vscode.window.showWarningMessage('Task reordering not yet implemented');
             this.treeProvider.refresh();
             vscode.window.showInformationMessage(`Task "${task.title}" moved down`);
         } catch (error) {

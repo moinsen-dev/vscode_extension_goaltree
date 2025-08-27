@@ -25,6 +25,7 @@ import {
     GraphTraversalOptions,
     GraphTraversalResult
 } from '../types/DependencyGraph';
+import { Dependency } from '../types/Dependency';
 import { DependencyStatus } from '../types/DependencyStatus';
 import { createLogger } from './logger';
 
@@ -670,7 +671,7 @@ export class GraphAlgorithms {
      */
     private analyzeCriticalPaths(graph: DependencyGraph) {
         const longestPaths: DependencyPath[] = [];
-        const criticalDependencies: typeof graph.edges extends Map<any, infer E> ? E['dependency'][] : never = [];
+        const criticalDependencies: Dependency[] = [];
         const bottlenecks: string[] = [];
         
         // Find nodes with high in-degree (bottlenecks)
@@ -722,9 +723,9 @@ export class GraphAlgorithms {
             const component = components[i];
             if (component.length < 2) continue; // Skip single-node clusters
             
-            const internalDependencies: typeof graph.edges extends Map<any, infer E> ? E['dependency'][] : never = [];
-            const incomingDependencies: typeof graph.edges extends Map<any, infer E> ? E['dependency'][] : never = [];
-            const outgoingDependencies: typeof graph.edges extends Map<any, infer E> ? E['dependency'][] : never = [];
+            const internalDependencies: Dependency[] = [];
+            const incomingDependencies: Dependency[] = [];
+            const outgoingDependencies: Dependency[] = [];
             
             for (const edge of graph.edges.values()) {
                 const sourceInCluster = component.includes(edge.source);
@@ -844,8 +845,8 @@ export class GraphAlgorithms {
     /**
      * Get dependencies for a path
      */
-    private getDependenciesForPath(graph: DependencyGraph, path: string[]): typeof graph.edges extends Map<any, infer E> ? E['dependency'][] : never {
-        const dependencies: typeof graph.edges extends Map<any, infer E> ? E['dependency'][] : never = [];
+    private getDependenciesForPath(graph: DependencyGraph, path: string[]): Dependency[] {
+        const dependencies: Dependency[] = [];
         
         for (let i = 0; i < path.length - 1; i++) {
             const source = path[i];
