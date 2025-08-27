@@ -540,16 +540,24 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
+    "vscode:prepublish": "npm run build:prod",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile && npm run lint",
+    "build": "node esbuild.config.js",
+    "build:prod": "node esbuild.config.js --production",
+    "build:watch": "node esbuild.config.js --watch",
+    "bundle": "npm run build:prod",
+    "bundle:analyze": "npm run build:prod && echo 'Bundle analysis complete!'",
+    "pretest": "npm run build && npm run lint",
     "lint": "eslint src --ext ts",
     "lint:fix": "eslint src --ext ts --fix",
     "format": "prettier --write src/**/*.ts",
     "format:check": "prettier --check src/**/*.ts",
     "test": "node ./out/test/runTest.js",
-    "package": "vsce package"
+    "package": "npm run build:prod && vsce package",
+    "package:dev": "npm run build && vsce package",
+    "clean": "rimraf out dist *.vsix",
+    "dev": "npm run build:watch"
   },
   "devDependencies": {
     "@types/ajv": "^0.0.5",
@@ -558,8 +566,10 @@
     "@typescript-eslint/eslint-plugin": "^5.45.0",
     "@typescript-eslint/parser": "^5.45.0",
     "@vscode/test-electron": "^2.2.0",
+    "esbuild": "^0.25.9",
     "eslint": "^8.28.0",
     "prettier": "^3.6.2",
+    "rimraf": "^6.0.1",
     "typescript": "^4.9.4",
     "vsce": "^2.15.0"
   },
