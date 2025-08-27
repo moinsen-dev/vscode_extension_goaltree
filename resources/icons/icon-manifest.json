@@ -1,0 +1,162 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Goal Tree Icon Manifest",
+  "description": "Manifest file describing available custom icons for the Goal Tree extension",
+  "version": "1.0.0",
+  "icons": {
+    "goalStatus": {
+      "planned": {
+        "file": "goal-status/planned.svg",
+        "description": "Icon for planned goals",
+        "size": "16x16",
+        "themeColor": "charts.blue",
+        "fallback": "circle-outline"
+      },
+      "inProgress": {
+        "file": "goal-status/in-progress.svg", 
+        "description": "Icon for goals in progress",
+        "size": "16x16",
+        "themeColor": "charts.orange",
+        "fallback": "play-circle"
+      },
+      "blocked": {
+        "file": "goal-status/blocked.svg",
+        "description": "Icon for blocked goals",
+        "size": "16x16", 
+        "themeColor": "charts.red",
+        "fallback": "error"
+      },
+      "completed": {
+        "file": "goal-status/completed.svg",
+        "description": "Icon for completed goals",
+        "size": "16x16",
+        "themeColor": "charts.green", 
+        "fallback": "check-all"
+      }
+    },
+    "taskStatus": {
+      "todo": {
+        "file": "task-status/todo.svg",
+        "description": "Icon for todo tasks",
+        "size": "16x16",
+        "themeColor": "charts.gray",
+        "fallback": "circle-outline"
+      },
+      "inProgress": {
+        "file": "task-status/in-progress.svg",
+        "description": "Icon for tasks in progress", 
+        "size": "16x16",
+        "themeColor": "charts.yellow",
+        "fallback": "clock"
+      },
+      "done": {
+        "file": "task-status/done.svg",
+        "description": "Icon for completed tasks",
+        "size": "16x16",
+        "themeColor": "charts.green",
+        "fallback": "check"
+      }
+    },
+    "special": {
+      "root": {
+        "file": "special/root-goal.svg",
+        "description": "Icon for root goals",
+        "size": "16x16",
+        "themeColor": "icon.foreground",
+        "fallback": "home"
+      },
+      "folder": {
+        "file": "special/folder-goal.svg", 
+        "description": "Icon for goals with children (collapsed)",
+        "size": "16x16",
+        "themeColor": "icon.foreground",
+        "fallback": "folder"
+      },
+      "folderOpen": {
+        "file": "special/folder-goal-open.svg",
+        "description": "Icon for goals with children (expanded)",
+        "size": "16x16", 
+        "themeColor": "icon.foreground",
+        "fallback": "folder-opened"
+      },
+      "dependency": {
+        "file": "special/dependency.svg",
+        "description": "Icon for dependency relationships",
+        "size": "16x16",
+        "themeColor": "charts.purple",
+        "fallback": "arrow-right"
+      },
+      "priority": {
+        "file": "special/priority.svg",
+        "description": "Icon for high priority items",
+        "size": "16x16",
+        "themeColor": "charts.red", 
+        "fallback": "flame"
+      },
+      "overdue": {
+        "file": "special/overdue.svg",
+        "description": "Icon for overdue items",
+        "size": "16x16",
+        "themeColor": "editorError.foreground",
+        "fallback": "watch"
+      }
+    },
+    "progress": {
+      "empty": {
+        "file": "progress/progress-0.svg",
+        "description": "0% progress indicator",
+        "size": "16x16",
+        "themeColor": "charts.gray",
+        "fallback": "circle-outline"
+      },
+      "quarter": {
+        "file": "progress/progress-25.svg", 
+        "description": "25% progress indicator",
+        "size": "16x16",
+        "themeColor": "charts.red",
+        "fallback": "circle-filled"
+      },
+      "half": {
+        "file": "progress/progress-50.svg",
+        "description": "50% progress indicator",
+        "size": "16x16",
+        "themeColor": "charts.orange",
+        "fallback": "circle-filled"
+      },
+      "threeQuarter": {
+        "file": "progress/progress-75.svg",
+        "description": "75% progress indicator", 
+        "size": "16x16",
+        "themeColor": "charts.yellow",
+        "fallback": "circle-filled"
+      },
+      "full": {
+        "file": "progress/progress-100.svg",
+        "description": "100% progress indicator",
+        "size": "16x16",
+        "themeColor": "charts.green",
+        "fallback": "pass-filled"
+      }
+    }
+  },
+  "themes": {
+    "light": {
+      "directory": "light/",
+      "description": "Light theme variants of icons"
+    },
+    "dark": {
+      "directory": "dark/",
+      "description": "Dark theme variants of icons"
+    },
+    "highContrast": {
+      "directory": "high-contrast/", 
+      "description": "High contrast variants for accessibility"
+    }
+  },
+  "metadata": {
+    "created": "2025-08-27",
+    "version": "1.0.0",
+    "author": "Goal Tree Extension",
+    "license": "MIT"
+  }
+}
