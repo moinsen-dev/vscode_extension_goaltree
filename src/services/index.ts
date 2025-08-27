@@ -21,7 +21,7 @@ export { StorageService,
          type StorageConfig,
          type StorageResult,
          type DataChangeEvent,
-         type StorageMetadata } from './StorageService';
+         type StorageMetadata } from './storageService';
 export { StateManager } from './stateManager';
 export { DependencyService } from './dependencyService';
 
