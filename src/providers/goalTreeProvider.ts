@@ -1,33 +1,15 @@
 import * as vscode from 'vscode';
-import { Goal, Task, TreeNode, TreeNodeType } from '../models';
+import { Goal, Task } from '../types/Goal';
+import { TreeViewConfig, TreeRefreshOptions, TREE_CONTEXT_VALUES } from '../types/TreeTypes';
+import { GoalTreeItem } from './GoalTreeItem';
 import { StateManager } from '../services/stateManager';
 import { GoalManager } from '../services/goalManager';
+import { ProgressCalculator, ProgressInfo } from '../utils/ProgressCalculator';
 import { ICONS, CONTEXT_VALUES, TREE_NODE_TYPES, DEFAULTS, ERROR_MESSAGES, CONFIG_KEYS } from '../constants';
 import { debounce, DebouncePresets, DebounceManager } from '../utils/debounce';
 import { memoize, VirtualScroller, PerformanceTimer, createProfiler } from '../utils/performance';
 import { createLogger, Logger, LogLevel, logPerformance } from '../utils/logger';
 
-/**
- * Tree item representing a goal or task in the VS Code tree view
- */
-export class GoalTreeItem extends vscode.TreeItem {
-    constructor(
-        public override readonly id: string,
-        public override readonly label: string,
-        public override readonly collapsibleState: vscode.TreeItemCollapsibleState,
-        public override readonly contextValue: string,
-        public override readonly tooltip?: string,
-        public override readonly iconPath?: vscode.ThemeIcon,
-        public override readonly command?: vscode.Command
-    ) {
-        super(label, collapsibleState);
-        this.id = id;
-        this.tooltip = tooltip;
-        this.contextValue = contextValue;
-        this.iconPath = iconPath;
-        this.command = command;
-    }
-}
 
 /**
  * Performance configuration for the tree provider
@@ -61,6 +43,7 @@ export class GoalTreeProvider implements vscode.TreeDataProvider<string> {
 
     private stateManager: StateManager;
     private goalManager: GoalManager;
+    private progressCalculator: ProgressCalculator;
     private showCompleted: boolean = true;
     private groupByStatus: boolean = false;
     private sortByTitle: boolean = false;
@@ -85,6 +68,7 @@ export class GoalTreeProvider implements vscode.TreeDataProvider<string> {
     constructor(stateManager: StateManager, goalManager: GoalManager, context?: vscode.ExtensionContext) {
         this.stateManager = stateManager;
         this.goalManager = goalManager;
+        this.progressCalculator = new ProgressCalculator();
         
         // Initialize performance components
         this.logger = createLogger('GoalTreeProvider');
@@ -148,7 +132,7 @@ export class GoalTreeProvider implements vscode.TreeDataProvider<string> {
      */
     private initializeMemoizedFunctions(): void {
         this.memoizedGetProgress = memoize(
-            (goalId: string) => this.goalManager.getGoalProgress(goalId),
+            (goalId: string) => this.calculateGoalProgress(goalId),
             { maxCacheSize: this.performanceConfig.maxCacheSize }
         );
         
@@ -376,50 +360,35 @@ export class GoalTreeProvider implements vscode.TreeDataProvider<string> {
     private createGoalTreeItem(goal: Goal): GoalTreeItem {
         try {
             const hasChildren = this.calculateHasChildren(goal);
-            let collapsibleState: vscode.TreeItemCollapsibleState;
-            
-            if (hasChildren) {
-                // Use saved expansion state if available
-                const isExpanded = this.isExpanded(goal.id);
-                collapsibleState = isExpanded ? 
-                    vscode.TreeItemCollapsibleState.Expanded : 
-                    vscode.TreeItemCollapsibleState.Collapsed;
-            } else {
-                collapsibleState = vscode.TreeItemCollapsibleState.None;
-            }
+            const isExpanded = this.isExpanded(goal.id);
             
             // Use memoized progress calculation for better performance
             const progress = this.performanceConfig.cacheEnabled ? 
                 this.memoizedGetProgress(goal.id) : 
-                this.goalManager.getGoalProgress(goal.id);
-                
-            const progressText = this.formatProgressText(progress, goal);
-            const label = `${goal.title}${progressText}`;
+                this.calculateGoalProgress(goal.id);
             
-            const tooltip = this.createGoalTooltip(goal, progress);
-            const contextValue = this.getGoalContextValue(goal);
-            const iconPath = this.getGoalIcon(goal);
-            
-            const treeItem = new GoalTreeItem(
-                goal.id,
-                label,
-                collapsibleState,
-                contextValue,
-                tooltip,
-                iconPath
-            );
-            
-            // Add accessibility information
-            treeItem.accessibilityInformation = {
-                label: `Goal: ${goal.title}, Status: ${goal.status}, Progress: ${progress.percentage}%`,
-                role: 'treeitem'
-            };
-            
-            return treeItem;
+            return GoalTreeItem.fromGoal(goal, hasChildren, isExpanded, progress);
         } catch (error) {
             this.logger.error(`Error creating tree item for goal ${goal.id}`, error);
             throw error;
         }
+    }
+    
+    /**
+     * Calculate progress for a goal
+     */
+    private calculateGoalProgress(goalId: string): { completed: number; total: number; percentage: number } {
+        const goal = this.stateManager.getGoal(goalId);
+        if (!goal) {
+            return { completed: 0, total: 0, percentage: 0 };
+        }
+        
+        const progressInfo = this.progressCalculator.calculateGoalProgress(goal);
+        return {
+            completed: progressInfo.completed,
+            total: progressInfo.total,
+            percentage: progressInfo.percentage
+        };
     }
     
     /**
@@ -441,35 +410,7 @@ export class GoalTreeProvider implements vscode.TreeDataProvider<string> {
      */
     private createTaskTreeItem(task: Task, parentGoal: Goal): GoalTreeItem {
         try {
-            const label = task.title;
-            const tooltip = this.createTaskTooltip(task);
-            const contextValue = this.getTaskContextValue(task);
-            const iconPath = this.getTaskIcon(task);
-            
-            // Add command to toggle task completion on click
-            const command: vscode.Command = {
-                command: 'goalTree.toggleTask',
-                title: 'Toggle Task',
-                arguments: [parentGoal.id, task.id]
-            };
-            
-            const treeItem = new GoalTreeItem(
-                `${parentGoal.id}:${task.id}`,
-                label,
-                vscode.TreeItemCollapsibleState.None,
-                contextValue,
-                tooltip,
-                iconPath,
-                command
-            );
-            
-            // Add accessibility information
-            treeItem.accessibilityInformation = {
-                label: `Task: ${task.title}, Status: ${task.status}`,
-                role: 'treeitem'
-            };
-            
-            return treeItem;
+            return GoalTreeItem.fromTask(task, parentGoal);
         } catch (error) {
             this.logger.error(`Error creating tree item for task ${task.id}`, error);
             throw error;

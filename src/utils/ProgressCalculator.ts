@@ -551,4 +551,4 @@ export class ProgressUtils {
   }
 }
 
-export { ProgressConfig, ProgressInfo, HierarchicalProgress };
+// Types are already exported above, no need to re-export

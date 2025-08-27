@@ -14,6 +14,9 @@ export * from './extension';
 // VS Code specific types
 export * from './vscode';
 
+// Tree view types
+export * from './TreeTypes';
+
 // Common utility types
 export * from './common';
 
