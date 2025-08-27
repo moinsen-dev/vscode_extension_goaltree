@@ -1,398 +1,266 @@
 /**
- * Enhanced Goal types with dependency support for the Goal Tree extension
- * This file extends the core Goal model with dependency-specific type definitions
+ * Core Goal types for the Goal Tree extension
+ * This file defines the fundamental Goal interface and related types
  */
 
-import { Goal as BaseGoal, GoalStatus } from '../models/goal';
-import { Dependency, DependencyType, DependencyTypeType } from './Dependency';
-import { DependencyStatus, DependencyStatusType } from './DependencyStatus';
+import { GoalStatus, GoalStatusType } from './GoalStatus';
 
 /**
- * Enhanced Goal interface that includes structured dependency information
- * This extends the base Goal model with richer dependency data
+ * Task status enumeration
  */
-export interface EnhancedGoal extends BaseGoal {
-  /** Structured dependency relationships */
-  dependencies: {
-    /** Dependencies that block this goal */
-    blockedBy: Dependency[];
+export enum TaskStatus {
+  /** Task is planned but not started */
+  TODO = 'todo',
+  
+  /** Task is currently being worked on */
+  IN_PROGRESS = 'in-progress',
+  
+  /** Task has been completed */
+  DONE = 'done'
+}
+
+/**
+ * Type alias for task status string values
+ */
+export type TaskStatusType = `${TaskStatus}`;
+
+/**
+ * Task interface representing individual actionable items within goals
+ */
+export interface Task {
+  /** Unique identifier for the task */
+  id: string;
+  
+  /** Task title/description */
+  title: string;
+  
+  /** Current status of the task */
+  status: TaskStatusType;
+  
+  /** Order/priority within the parent goal (0-based) */
+  order: number;
+  
+  /** When the task was created */
+  createdAt: Date;
+  
+  /** When the task was completed (if status is 'done') */
+  completedAt?: Date;
+  
+  /** Optional detailed description or notes */
+  description?: string;
+}
+
+/**
+ * Core Goal interface representing hierarchical goals with basic relationships
+ */
+export interface Goal {
+  /** Unique identifier for the goal */
+  id: string;
+  
+  /** Goal title */
+  title: string;
+  
+  /** Optional detailed description */
+  description?: string;
+  
+  /** Current status of the goal */
+  status: GoalStatusType;
+  
+  /** ID of parent goal (undefined for root goals) */
+  parentId?: string;
+  
+  /** Array of goal IDs that must be completed before this goal can proceed */
+  blockedByIds: string[];
+  
+  /** Tasks associated with this goal */
+  tasks: Task[];
+  
+  /** When the goal was created */
+  createdAt: Date;
+  
+  /** When the goal was last updated */
+  updatedAt?: Date;
+  
+  /** When the goal was completed (if status is 'completed') */
+  completedAt?: Date;
+  
+  /** Optional metadata for extensibility */
+  metadata?: {
+    /** Color coding for visual organization */
+    color?: string;
     
-    /** Dependencies this goal blocks */
-    blocking: Dependency[];
+    /** Priority level (1-5, where 5 is highest) */
+    priority?: number;
     
-    /** Computed dependency metadata */
-    computed: {
-      /** Whether this goal is currently blocked by any active dependencies */
-      isBlocked: boolean;
-      
-      /** Number of active dependencies blocking this goal */
-      activeBlockingCount: number;
-      
-      /** Number of goals this goal is currently blocking */
-      currentlyBlockingCount: number;
-      
-      /** Maximum depth of dependency chain blocking this goal */
-      maxBlockingDepth: number;
-      
-      /** Estimated resolution time for all blocking dependencies */
-      estimatedUnblockTime?: Date;
-      
-      /** Whether this goal is part of a circular dependency */
-      isInCircularDependency: boolean;
-      
-      /** Next dependencies that would become unblocked if this goal completes */
-      nextUnblockable: string[];
-    };
+    /** Estimated effort in hours */
+    estimatedHours?: number;
+    
+    /** Actual time spent in hours */
+    actualHours?: number;
+    
+    /** Tags for categorization */
+    tags?: string[];
+    
+    /** Due date for the goal */
+    dueDate?: Date;
   };
 }
 
 /**
- * Goal with dependency context for UI display
+ * Goal creation parameters (subset of Goal interface)
  */
-export interface GoalWithDependencyContext extends EnhancedGoal {
-  /** UI-specific dependency information */
-  dependencyContext: {
-    /** Visual status for dependency representation */
-    visualStatus: GoalDependencyVisualStatus;
-    
-    /** Human-readable dependency summary */
-    dependencySummary: string;
-    
-    /** Blocking reason (why this goal can't proceed) */
-    blockingReason?: string;
-    
-    /** Critical path information */
-    criticalPath?: {
-      /** Whether this goal is on the critical path */
-      isOnCriticalPath: boolean;
-      
-      /** Position in the critical path (0-based) */
-      criticalPathPosition?: number;
-      
-      /** Total critical path length */
-      criticalPathLength?: number;
-    };
-    
-    /** Dependency warnings */
-    warnings: DependencyWarning[];
-  };
+export interface CreateGoalParams {
+  title: string;
+  description?: string;
+  parentId?: string;
+  metadata?: Goal['metadata'];
 }
 
 /**
- * Visual status for goal dependency representation
+ * Goal update parameters
  */
-export enum GoalDependencyVisualStatus {
-  /** Goal has no dependencies and can proceed */
-  FREE = 'free',
-  
-  /** Goal is blocked by active dependencies */
-  BLOCKED = 'blocked',
-  
-  /** Goal has dependencies but they are close to completion */
-  NEARLY_UNBLOCKED = 'nearly_unblocked',
-  
-  /** Goal is part of a circular dependency */
-  CIRCULAR = 'circular',
-  
-  /** Goal has soft dependencies that don't prevent progress */
-  SOFT_BLOCKED = 'soft_blocked',
-  
-  /** Goal has invalid or problematic dependencies */
-  INVALID_DEPENDENCIES = 'invalid_dependencies'
+export interface UpdateGoalParams {
+  title?: string;
+  description?: string;
+  status?: GoalStatusType;
+  parentId?: string;
+  blockedByIds?: string[];
+  metadata?: Goal['metadata'];
 }
 
 /**
- * Type alias for goal dependency visual status string values
+ * Task creation parameters
  */
-export type GoalDependencyVisualStatusType = `${GoalDependencyVisualStatus}`;
-
-/**
- * Dependency warning for goals
- */
-export interface DependencyWarning {
-  /** Type of warning */
-  type: DependencyWarningType;
-  
-  /** Warning message */
-  message: string;
-  
-  /** Severity level */
-  severity: 'low' | 'medium' | 'high' | 'critical';
-  
-  /** Suggested action */
-  suggestedAction?: string;
-  
-  /** Related goal IDs */
-  relatedGoalIds: string[];
+export interface CreateTaskParams {
+  title: string;
+  description?: string;
 }
 
 /**
- * Types of dependency warnings
+ * Task update parameters
  */
-export enum DependencyWarningType {
-  /** Circular dependency detected */
-  CIRCULAR_DEPENDENCY = 'circular_dependency',
-  
-  /** Dependencies are overdue */
-  OVERDUE_DEPENDENCIES = 'overdue_dependencies',
-  
-  /** Too many dependencies for efficient management */
-  EXCESSIVE_DEPENDENCIES = 'excessive_dependencies',
-  
-  /** Blocking goal has been inactive for too long */
-  STALE_BLOCKING_GOAL = 'stale_blocking_goal',
-  
-  /** Invalid or missing dependency relationships */
-  INVALID_DEPENDENCIES = 'invalid_dependencies',
-  
-  /** Potential performance impact from dependency structure */
-  PERFORMANCE_CONCERN = 'performance_concern'
+export interface UpdateTaskParams {
+  title?: string;
+  description?: string;
+  status?: TaskStatusType;
+  order?: number;
 }
 
 /**
- * Type alias for dependency warning type string values
+ * Goal hierarchy information
  */
-export type DependencyWarningTypeType = `${DependencyWarningType}`;
-
-/**
- * Goal dependency configuration
- */
-export interface GoalDependencyConfig {
-  /** Default dependency type for new relationships */
-  defaultDependencyType: DependencyTypeType;
+export interface GoalHierarchy {
+  /** The goal itself */
+  goal: Goal;
   
-  /** Whether to auto-resolve dependencies when blocking goals complete */
-  autoResolveDependencies: boolean;
+  /** Direct children of this goal */
+  children: GoalHierarchy[];
   
-  /** Maximum number of dependencies to allow per goal */
-  maxDependenciesPerGoal: number;
+  /** Depth level in the hierarchy (0 for root goals) */
+  level: number;
   
-  /** Maximum dependency chain depth */
-  maxDependencyChainDepth: number;
-  
-  /** Whether to warn about circular dependencies */
-  warnCircularDependencies: boolean;
-  
-  /** Whether to allow soft dependencies */
-  allowSoftDependencies: boolean;
-  
-  /** Threshold for considering dependencies "overdue" (in days) */
-  overdueThresholdDays: number;
+  /** Path from root to this goal (array of goal IDs) */
+  path: string[];
 }
 
 /**
- * Goal dependency metrics
+ * Goal relationship information
  */
-export interface GoalDependencyMetrics {
-  /** Goal ID */
-  goalId: string;
+export interface GoalRelationship {
+  /** The goal that is blocked */
+  blockedGoal: Goal;
   
-  /** Total number of dependencies */
-  totalDependencies: number;
+  /** The goal that is doing the blocking */
+  blockingGoal: Goal;
   
-  /** Number of active dependencies */
-  activeDependencies: number;
-  
-  /** Number of resolved dependencies */
-  resolvedDependencies: number;
-  
-  /** Number of goals this goal blocks */
-  goalsBlocked: number;
-  
-  /** Average age of dependencies (in days) */
-  averageDependencyAge: number;
-  
-  /** Dependency resolution rate (resolved / total) */
-  resolutionRate: number;
-  
-  /** Time spent blocked (in days) */
-  timeSpentBlocked: number;
-  
-  /** Predicted unblock date */
-  predictedUnblockDate?: Date;
+  /** Whether this is a direct or transitive relationship */
+  isDirect: boolean;
 }
 
 /**
- * Bulk goal dependency operation parameters
+ * Bulk operation result
  */
-export interface BulkGoalDependencyParams {
-  /** Goal IDs to operate on */
-  goalIds: string[];
+export interface BulkOperationResult {
+  /** Number of successful operations */
+  successful: number;
   
-  /** Operation to perform */
-  operation: 'add_dependency' | 'remove_dependency' | 'update_status' | 'validate_dependencies';
+  /** Number of failed operations */
+  failed: number;
   
-  /** Operation-specific parameters */
-  parameters: {
-    /** For add_dependency operation */
-    addDependency?: {
-      blockingGoalId: string;
-      dependencyType?: DependencyTypeType;
-    };
-    
-    /** For remove_dependency operation */
-    removeDependency?: {
-      blockingGoalId: string;
-    };
-    
-    /** For update_status operation */
-    updateStatus?: {
-      newStatus: DependencyStatusType;
-    };
-  };
+  /** Array of error messages for failed operations */
+  errors: string[];
   
-  /** Whether to validate before executing */
-  validateFirst?: boolean;
-  
-  /** Whether to continue on errors */
-  continueOnError?: boolean;
+  /** Details of the operations performed */
+  details: Array<{
+    goalId: string;
+    operation: string;
+    success: boolean;
+    error?: string;
+  }>;
 }
 
 /**
- * Helper functions for working with enhanced goals
+ * Helper functions for working with goals
  */
-export const GoalDependencyUtils = {
+export const GoalUtils = {
   /**
-   * Convert a base goal to an enhanced goal with dependency information
+   * Check if a goal is a root goal (has no parent)
    */
-  enhance(baseGoal: BaseGoal, dependencies: Dependency[]): EnhancedGoal {
-    const blockedBy = dependencies.filter(d => d.blockedGoalId === baseGoal.id);
-    const blocking = dependencies.filter(d => d.blockingGoalId === baseGoal.id);
-    
-    const activeBlockingCount = blockedBy.filter(d => d.status === DependencyStatus.ACTIVE).length;
-    const isBlocked = activeBlockingCount > 0;
-    
-    return {
-      ...baseGoal,
-      dependencies: {
-        blockedBy,
-        blocking,
-        computed: {
-          isBlocked,
-          activeBlockingCount,
-          currentlyBlockingCount: blocking.filter(d => d.status === DependencyStatus.ACTIVE).length,
-          maxBlockingDepth: this.calculateMaxDepth(baseGoal.id, dependencies),
-          isInCircularDependency: this.checkCircularDependency(baseGoal.id, dependencies),
-          nextUnblockable: this.getNextUnblockable(baseGoal.id, dependencies)
-        }
-      }
-    };
+  isRootGoal(goal: Goal): boolean {
+    return !goal.parentId;
   },
 
   /**
-   * Calculate the maximum depth of dependency chain for a goal
+   * Check if a goal has any tasks
    */
-  calculateMaxDepth(goalId: string, dependencies: Dependency[], visited: Set<string> = new Set()): number {
-    if (visited.has(goalId)) {
-      return 0; // Avoid infinite loops
-    }
+  hasTasks(goal: Goal): boolean {
+    return goal.tasks.length > 0;
+  },
 
-    visited.add(goalId);
-    const blockedBy = dependencies
-      .filter(d => d.blockedGoalId === goalId && d.status === DependencyStatus.ACTIVE)
-      .map(d => d.blockingGoalId);
+  /**
+   * Get completed tasks count
+   */
+  getCompletedTasksCount(goal: Goal): number {
+    return goal.tasks.filter(task => task.status === TaskStatus.DONE).length;
+  },
 
-    if (blockedBy.length === 0) {
+  /**
+   * Calculate task completion percentage
+   */
+  getTaskCompletionPercentage(goal: Goal): number {
+    if (goal.tasks.length === 0) {
       return 0;
     }
-
-    let maxDepth = 0;
-    for (const blockingGoalId of blockedBy) {
-      const depth = this.calculateMaxDepth(blockingGoalId, dependencies, new Set(visited));
-      maxDepth = Math.max(maxDepth, depth + 1);
-    }
-
-    return maxDepth;
+    return (this.getCompletedTasksCount(goal) / goal.tasks.length) * 100;
   },
 
   /**
-   * Check if a goal is part of a circular dependency
+   * Check if a goal is blocked by other goals
    */
-  checkCircularDependency(goalId: string, dependencies: Dependency[], visited: Set<string> = new Set(), path: Set<string> = new Set()): boolean {
-    if (path.has(goalId)) {
-      return true; // Cycle detected
-    }
-
-    if (visited.has(goalId)) {
-      return false; // Already processed
-    }
-
-    visited.add(goalId);
-    path.add(goalId);
-
-    const blockedBy = dependencies
-      .filter(d => d.blockedGoalId === goalId)
-      .map(d => d.blockingGoalId);
-
-    for (const blockingGoalId of blockedBy) {
-      if (this.checkCircularDependency(blockingGoalId, dependencies, visited, new Set(path))) {
-        return true;
-      }
-    }
-
-    path.delete(goalId);
-    return false;
+  isBlocked(goal: Goal): boolean {
+    return goal.blockedByIds.length > 0 || goal.status === GoalStatus.BLOCKED;
   },
 
   /**
-   * Get goals that would become unblockable if this goal completes
+   * Get all task statuses
    */
-  getNextUnblockable(goalId: string, dependencies: Dependency[]): string[] {
-    return dependencies
-      .filter(d => d.blockingGoalId === goalId && d.status === DependencyStatus.ACTIVE)
-      .map(d => d.blockedGoalId)
-      .filter((id, index, array) => array.indexOf(id) === index); // Remove duplicates
+  getAllTaskStatuses(): TaskStatusType[] {
+    return Object.values(TaskStatus);
   },
 
   /**
-   * Calculate visual status for a goal based on its dependencies
+   * Get display-friendly name for a task status
    */
-  calculateVisualStatus(goal: EnhancedGoal): GoalDependencyVisualStatusType {
-    if (goal.dependencies.computed.isInCircularDependency) {
-      return GoalDependencyVisualStatus.CIRCULAR;
+  getTaskStatusDisplayName(status: TaskStatusType): string {
+    switch (status) {
+      case TaskStatus.TODO:
+        return 'To Do';
+      case TaskStatus.IN_PROGRESS:
+        return 'In Progress';
+      case TaskStatus.DONE:
+        return 'Done';
+      default:
+        return 'Unknown';
     }
-
-    if (goal.dependencies.computed.activeBlockingCount === 0) {
-      return GoalDependencyVisualStatus.FREE;
-    }
-
-    const hasHardDependencies = goal.dependencies.blockedBy.some(
-      d => d.status === DependencyStatus.ACTIVE && 
-          (d.metadata?.type === DependencyType.HARD || !d.metadata?.type)
-    );
-
-    if (!hasHardDependencies) {
-      return GoalDependencyVisualStatus.SOFT_BLOCKED;
-    }
-
-    // Check if dependencies are close to completion
-    const nearCompletion = goal.dependencies.blockedBy.some(
-      d => d.status === DependencyStatus.ACTIVE && 
-          d.metadata?.expectedResolutionDate &&
-          new Date(d.metadata.expectedResolutionDate).getTime() - Date.now() < 7 * 24 * 60 * 60 * 1000 // 7 days
-    );
-
-    if (nearCompletion) {
-      return GoalDependencyVisualStatus.NEARLY_UNBLOCKED;
-    }
-
-    return GoalDependencyVisualStatus.BLOCKED;
-  },
-
-  /**
-   * Generate dependency summary text for a goal
-   */
-  generateDependencySummary(goal: EnhancedGoal): string {
-    const activeCount = goal.dependencies.computed.activeBlockingCount;
-    
-    if (activeCount === 0) {
-      return 'No blocking dependencies';
-    }
-
-    if (activeCount === 1) {
-      return '1 blocking dependency';
-    }
-
-    return `${activeCount} blocking dependencies`;
   }
 };
