@@ -9,5 +9,6 @@
 
 export { GoalTreeProvider } from './goalTreeProvider';
 export { GoalTreeItem } from './GoalTreeItem';
+export { TreeContextMenuProvider } from './TreeContextMenuProvider';
 export { CommandHandler } from './commandHandler';
 export { ConfigurationProvider } from './configurationProvider';

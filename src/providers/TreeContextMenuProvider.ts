@@ -1,0 +1,595 @@
+/**
+ * TreeContextMenuProvider.ts - Context menu provider for goal tree operations
+ * 
+ * This file manages right-click context menus for goal tree items,
+ * providing contextual actions based on item type and status.
+ */
+
+import * as vscode from 'vscode';
+import { Goal, Task, GoalStatus, TaskStatus } from '../types/Goal';
+import { TREE_CONTEXT_VALUES } from '../types/TreeTypes';
+import { StateManager } from '../services/stateManager';
+import { GoalManager } from '../services/goalManager';
+import { createLogger } from '../utils/logger';
+
+/**
+ * Context menu item definition
+ */
+interface ContextMenuItem {
+    command: string;
+    title: string;
+    icon?: string;
+    group?: string;
+    when?: string;
+    enabled?: boolean;
+}
+
+/**
+ * Context menu group definitions for better organization
+ */
+const MENU_GROUPS = {
+    CREATE: '1_create',
+    EDIT: '2_edit',
+    STATUS: '3_status',
+    MOVE: '4_move',
+    DEPENDENCY: '5_depend',
+    VIEW: '6_view',
+    DELETE: '9_delete'
+} as const;
+
+/**
+ * Tree context menu provider
+ * Provides dynamic context menus based on the selected tree item
+ */
+export class TreeContextMenuProvider {
+    private logger = createLogger('TreeContextMenuProvider');
+
+    constructor(
+        private stateManager: StateManager,
+        private goalManager: GoalManager
+    ) {}
+
+    /**
+     * Get context menu items for a given tree element
+     * @param element The tree element (goalId or goalId:taskId)
+     * @param contextValue The context value from the tree item
+     * @returns Array of context menu items
+     */
+    getContextMenuItems(element: string, contextValue: string): ContextMenuItem[] {
+        try {
+            // Determine if this is a goal or task
+            if (element.includes(':')) {
+                // Task element (format: goalId:taskId)
+                const [goalId, taskId] = element.split(':');
+                return this.getTaskContextMenuItems(goalId, taskId, contextValue);
+            } else {
+                // Goal element
+                return this.getGoalContextMenuItems(element, contextValue);
+            }
+        } catch (error) {
+            this.logger.error('Error generating context menu items', { element, contextValue, error });
+            return [];
+        }
+    }
+
+    /**
+     * Get context menu items for goal elements
+     */
+    private getGoalContextMenuItems(goalId: string, contextValue: string): ContextMenuItem[] {
+        const goal = this.stateManager.getGoal(goalId);
+        if (!goal) {
+            this.logger.warn('Goal not found for context menu', { goalId });
+            return [];
+        }
+
+        const items: ContextMenuItem[] = [];
+
+        // Creation items
+        items.push(
+            {
+                command: 'goalTree.createSubGoal',
+                title: 'Add Sub-goal',
+                icon: 'plus',
+                group: MENU_GROUPS.CREATE
+            },
+            {
+                command: 'goalTree.addTask',
+                title: 'Add Task',
+                icon: 'checklist',
+                group: MENU_GROUPS.CREATE
+            }
+        );
+
+        // Edit items
+        items.push(
+            {
+                command: 'goalTree.editGoal',
+                title: 'Edit Goal',
+                icon: 'edit',
+                group: MENU_GROUPS.EDIT
+            },
+            {
+                command: 'goalTree.duplicateGoal',
+                title: 'Duplicate Goal',
+                icon: 'copy',
+                group: MENU_GROUPS.EDIT
+            }
+        );
+
+        // Status items (only show relevant status changes)
+        const statusItems = this.getGoalStatusMenuItems(goal);
+        items.push(...statusItems);
+
+        // Dependency items
+        items.push(
+            {
+                command: 'goalTree.addDependency',
+                title: 'Add Dependency',
+                icon: 'link',
+                group: MENU_GROUPS.DEPENDENCY
+            },
+            {
+                command: 'goalTree.showDependencies',
+                title: 'Show Dependencies',
+                icon: 'info',
+                group: MENU_GROUPS.DEPENDENCY,
+                enabled: goal.blockedByIds.length > 0
+            }
+        );
+
+        // Remove dependency item (only if has dependencies)
+        if (goal.blockedByIds.length > 0) {
+            items.push({
+                command: 'goalTree.removeDependency',
+                title: 'Remove Dependency',
+                icon: 'unlink',
+                group: MENU_GROUPS.DEPENDENCY
+            });
+        }
+
+        // View items
+        items.push(
+            {
+                command: 'goalTree.expandAll',
+                title: 'Expand All',
+                icon: 'expand-all',
+                group: MENU_GROUPS.VIEW
+            },
+            {
+                command: 'goalTree.collapseAll',
+                title: 'Collapse All',
+                icon: 'collapse-all',
+                group: MENU_GROUPS.VIEW
+            }
+        );
+
+        // Delete item (always last)
+        items.push({
+            command: 'goalTree.deleteGoal',
+            title: 'Delete Goal',
+            icon: 'trash',
+            group: MENU_GROUPS.DELETE
+        });
+
+        this.logger.debug('Generated goal context menu items', { 
+            goalId, 
+            itemCount: items.length,
+            status: goal.status 
+        });
+
+        return items.filter(item => item.enabled !== false);
+    }
+
+    /**
+     * Get context menu items for task elements
+     */
+    private getTaskContextMenuItems(goalId: string, taskId: string, contextValue: string): ContextMenuItem[] {
+        const goal = this.stateManager.getGoal(goalId);
+        if (!goal) {
+            this.logger.warn('Goal not found for task context menu', { goalId, taskId });
+            return [];
+        }
+
+        const task = goal.tasks.find(t => t.id === taskId);
+        if (!task) {
+            this.logger.warn('Task not found for context menu', { goalId, taskId });
+            return [];
+        }
+
+        const items: ContextMenuItem[] = [];
+
+        // Edit items
+        items.push({
+            command: 'goalTree.editTask',
+            title: 'Edit Task',
+            icon: 'edit',
+            group: MENU_GROUPS.EDIT
+        });
+
+        // Status items
+        const statusItems = this.getTaskStatusMenuItems(task);
+        items.push(...statusItems);
+
+        // Move items (if multiple tasks exist)
+        if (goal.tasks.length > 1) {
+            const taskIndex = goal.tasks.findIndex(t => t.id === taskId);
+            
+            if (taskIndex > 0) {
+                items.push({
+                    command: 'goalTree.moveTaskUp',
+                    title: 'Move Up',
+                    icon: 'arrow-up',
+                    group: MENU_GROUPS.MOVE
+                });
+            }
+            
+            if (taskIndex < goal.tasks.length - 1) {
+                items.push({
+                    command: 'goalTree.moveTaskDown',
+                    title: 'Move Down',
+                    icon: 'arrow-down',
+                    group: MENU_GROUPS.MOVE
+                });
+            }
+        }
+
+        // Delete item (always last)
+        items.push({
+            command: 'goalTree.deleteTask',
+            title: 'Delete Task',
+            icon: 'trash',
+            group: MENU_GROUPS.DELETE
+        });
+
+        this.logger.debug('Generated task context menu items', { 
+            goalId, 
+            taskId, 
+            itemCount: items.length,
+            status: task.status 
+        });
+
+        return items.filter(item => item.enabled !== false);
+    }
+
+    /**
+     * Get status menu items for goals (only show applicable status changes)
+     */
+    private getGoalStatusMenuItems(goal: Goal): ContextMenuItem[] {
+        const items: ContextMenuItem[] = [];
+        const currentStatus = goal.status;
+
+        // Add status change options (excluding current status)
+        const statusOptions: Array<{status: GoalStatus, title: string, icon: string}> = [
+            { status: 'planned', title: 'Mark as Planned', icon: 'circle-outline' },
+            { status: 'in-progress', title: 'Mark as In Progress', icon: 'play' },
+            { status: 'completed', title: 'Mark as Completed', icon: 'check' },
+            { status: 'blocked', title: 'Mark as Blocked', icon: 'stop' }
+        ];
+
+        statusOptions
+            .filter(option => option.status !== currentStatus)
+            .forEach(option => {
+                items.push({
+                    command: `goalTree.mark${this.capitalizeFirst(option.status.replace('-', ''))}`,
+                    title: option.title,
+                    icon: option.icon,
+                    group: MENU_GROUPS.STATUS
+                });
+            });
+
+        return items;
+    }
+
+    /**
+     * Get status menu items for tasks (only show applicable status changes)
+     */
+    private getTaskStatusMenuItems(task: Task): ContextMenuItem[] {
+        const items: ContextMenuItem[] = [];
+        
+        // For tasks, we provide a toggle action and specific status changes
+        items.push({
+            command: 'goalTree.toggleTask',
+            title: this.getTaskToggleTitle(task.status),
+            icon: this.getTaskToggleIcon(task.status),
+            group: MENU_GROUPS.STATUS
+        });
+
+        // Add specific status options if different from current
+        const statusOptions: Array<{status: TaskStatus, title: string, icon: string}> = [
+            { status: 'todo', title: 'Mark as To Do', icon: 'circle-outline' },
+            { status: 'in-progress', title: 'Mark as In Progress', icon: 'play' },
+            { status: 'done', title: 'Mark as Done', icon: 'check' }
+        ];
+
+        statusOptions
+            .filter(option => option.status !== task.status)
+            .forEach(option => {
+                items.push({
+                    command: 'goalTree.setTaskStatus',
+                    title: option.title,
+                    icon: option.icon,
+                    group: MENU_GROUPS.STATUS
+                });
+            });
+
+        return items;
+    }
+
+    /**
+     * Get appropriate toggle title for task based on current status
+     */
+    private getTaskToggleTitle(status: TaskStatus): string {
+        switch (status) {
+            case 'todo':
+                return 'Start Task';
+            case 'in-progress':
+                return 'Complete Task';
+            case 'done':
+                return 'Reopen Task';
+            default:
+                return 'Toggle Task';
+        }
+    }
+
+    /**
+     * Get appropriate toggle icon for task based on current status
+     */
+    private getTaskToggleIcon(status: TaskStatus): string {
+        switch (status) {
+            case 'todo':
+                return 'play';
+            case 'in-progress':
+                return 'check';
+            case 'done':
+                return 'undo';
+            default:
+                return 'check';
+        }
+    }
+
+    /**
+     * Capitalize first letter of a string
+     */
+    private capitalizeFirst(str: string): string {
+        return str.charAt(0).toUpperCase() + str.slice(1);
+    }
+
+    /**
+     * Check if a context menu item should be visible based on context value
+     */
+    isItemVisible(item: ContextMenuItem, contextValue: string): boolean {
+        if (!item.when) {
+            return true;
+        }
+
+        // Simple when clause evaluation - in a real implementation,
+        // this would use VS Code's when clause parser
+        return this.evaluateWhenClause(item.when, contextValue);
+    }
+
+    /**
+     * Simple when clause evaluation for context menus
+     * This is a basic implementation - VS Code has more sophisticated when clause parsing
+     */
+    private evaluateWhenClause(whenClause: string, contextValue: string): boolean {
+        try {
+            // Handle simple patterns like "viewItem =~ /^goal/"
+            if (whenClause.includes('viewItem')) {
+                if (whenClause.includes('=~')) {
+                    // Regular expression match
+                    const match = whenClause.match(/viewItem\s*=~\s*\/(.+)\//);
+                    if (match) {
+                        const regex = new RegExp(match[1]);
+                        return regex.test(contextValue);
+                    }
+                } else if (whenClause.includes('==')) {
+                    // Exact match
+                    const match = whenClause.match(/viewItem\s*==\s*(.+)/);
+                    if (match) {
+                        return contextValue === match[1].trim();
+                    }
+                } else if (whenClause.includes('!=')) {
+                    // Not equal match
+                    const match = whenClause.match(/viewItem\s*!=\s*(.+)/);
+                    if (match) {
+                        return contextValue !== match[1].trim();
+                    }
+                }
+            }
+
+            // Default to true for unsupported when clauses
+            return true;
+        } catch (error) {
+            this.logger.warn('Error evaluating when clause', { whenClause, contextValue, error });
+            return true;
+        }
+    }
+
+    /**
+     * Generate context menu configuration for package.json
+     * This method helps generate the menu contributions for package.json
+     */
+    generateMenuContributions(): any {
+        const menuContributions = {
+            "view/title": [
+                {
+                    "command": "goalTree.createGoal",
+                    "when": "view == goalTreeView",
+                    "group": "navigation"
+                },
+                {
+                    "command": "goalTree.refreshView",
+                    "when": "view == goalTreeView",
+                    "group": "navigation"
+                },
+                {
+                    "command": "goalTree.expandAll",
+                    "when": "view == goalTreeView",
+                    "group": "navigation"
+                },
+                {
+                    "command": "goalTree.collapseAll",
+                    "when": "view == goalTreeView",
+                    "group": "navigation"
+                }
+            ],
+            "view/item/context": [
+                // Goal context menus
+                {
+                    "command": "goalTree.createSubGoal",
+                    "when": "view == goalTreeView && viewItem =~ /^goal/",
+                    "group": "1_create"
+                },
+                {
+                    "command": "goalTree.addTask",
+                    "when": "view == goalTreeView && viewItem =~ /^goal/",
+                    "group": "1_create"
+                },
+                {
+                    "command": "goalTree.editGoal",
+                    "when": "view == goalTreeView && viewItem =~ /^goal/",
+                    "group": "2_edit"
+                },
+                {
+                    "command": "goalTree.duplicateGoal",
+                    "when": "view == goalTreeView && viewItem =~ /^goal/",
+                    "group": "2_edit"
+                },
+                
+                // Goal status menus
+                {
+                    "command": "goalTree.markPlanned",
+                    "when": "view == goalTreeView && viewItem =~ /^goal/ && viewItem != goal:planned",
+                    "group": "3_status"
+                },
+                {
+                    "command": "goalTree.markInProgress",
+                    "when": "view == goalTreeView && viewItem =~ /^goal/ && viewItem != goal:in-progress",
+                    "group": "3_status"
+                },
+                {
+                    "command": "goalTree.markCompleted",
+                    "when": "view == goalTreeView && viewItem =~ /^goal/ && viewItem != goal:completed",
+                    "group": "3_status"
+                },
+                {
+                    "command": "goalTree.markBlocked",
+                    "when": "view == goalTreeView && viewItem =~ /^goal/ && viewItem != goal:blocked",
+                    "group": "3_status"
+                },
+
+                // Task context menus
+                {
+                    "command": "goalTree.editTask",
+                    "when": "view == goalTreeView && viewItem =~ /^task/",
+                    "group": "2_edit"
+                },
+                {
+                    "command": "goalTree.toggleTask",
+                    "when": "view == goalTreeView && viewItem =~ /^task/",
+                    "group": "3_status"
+                },
+                {
+                    "command": "goalTree.moveTaskUp",
+                    "when": "view == goalTreeView && viewItem =~ /^task/",
+                    "group": "4_move"
+                },
+                {
+                    "command": "goalTree.moveTaskDown",
+                    "when": "view == goalTreeView && viewItem =~ /^task/",
+                    "group": "4_move"
+                },
+
+                // Dependency menus
+                {
+                    "command": "goalTree.addDependency",
+                    "when": "view == goalTreeView && viewItem =~ /^goal/",
+                    "group": "5_depend"
+                },
+                {
+                    "command": "goalTree.removeDependency",
+                    "when": "view == goalTreeView && viewItem =~ /^goal/",
+                    "group": "5_depend"
+                },
+                {
+                    "command": "goalTree.showDependencies",
+                    "when": "view == goalTreeView && viewItem =~ /^goal/",
+                    "group": "5_depend"
+                },
+
+                // Delete menus
+                {
+                    "command": "goalTree.deleteGoal",
+                    "when": "view == goalTreeView && viewItem =~ /^goal/",
+                    "group": "9_delete"
+                },
+                {
+                    "command": "goalTree.deleteTask",
+                    "when": "view == goalTreeView && viewItem =~ /^task/",
+                    "group": "9_delete"
+                }
+            ]
+        };
+
+        return menuContributions;
+    }
+
+    /**
+     * Get context menu items for the tree view title area
+     */
+    getTitleMenuItems(): ContextMenuItem[] {
+        return [
+            {
+                command: 'goalTree.createGoal',
+                title: 'Create Goal',
+                icon: 'plus',
+                group: 'navigation'
+            },
+            {
+                command: 'goalTree.refreshView',
+                title: 'Refresh',
+                icon: 'refresh',
+                group: 'navigation'
+            },
+            {
+                command: 'goalTree.expandAll',
+                title: 'Expand All',
+                icon: 'expand-all',
+                group: 'navigation'
+            },
+            {
+                command: 'goalTree.collapseAll',
+                title: 'Collapse All',
+                icon: 'collapse-all',
+                group: 'navigation'
+            },
+            {
+                command: 'goalTree.toggleShowCompleted',
+                title: 'Toggle Completed',
+                icon: 'eye',
+                group: 'view'
+            },
+            {
+                command: 'goalTree.toggleSortByTitle',
+                title: 'Sort by Title',
+                icon: 'sort-precedence',
+                group: 'view'
+            }
+        ];
+    }
+
+    /**
+     * Initialize context menu provider
+     * This method can be called to set up any initial configuration
+     */
+    initialize(): void {
+        this.logger.info('TreeContextMenuProvider initialized');
+    }
+
+    /**
+     * Dispose of resources used by the context menu provider
+     */
+    dispose(): void {
+        this.logger.info('TreeContextMenuProvider disposed');
+    }
+}

@@ -147,6 +147,60 @@
         "title": "Refresh",
         "category": "Goal Tree",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "goalTree.expandAll",
+        "title": "Expand All",
+        "category": "Goal Tree",
+        "icon": "$(expand-all)"
+      },
+      {
+        "command": "goalTree.collapseAll",
+        "title": "Collapse All",
+        "category": "Goal Tree",
+        "icon": "$(collapse-all)"
+      },
+      {
+        "command": "goalTree.toggleShowCompleted",
+        "title": "Toggle Show Completed",
+        "category": "Goal Tree",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "goalTree.toggleSortByTitle",
+        "title": "Toggle Sort by Title",
+        "category": "Goal Tree",
+        "icon": "$(sort-precedence)"
+      },
+      {
+        "command": "goalTree.toggleGroupByStatus",
+        "title": "Toggle Group by Status",
+        "category": "Goal Tree",
+        "icon": "$(group-by-ref-type)"
+      },
+      {
+        "command": "goalTree.searchGoals",
+        "title": "Search Goals",
+        "category": "Goal Tree",
+        "icon": "$(search)"
+      },
+      {
+        "command": "goalTree.filterByStatus",
+        "title": "Filter by Status",
+        "category": "Goal Tree",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "goalTree.showOnlyBlocked",
+        "title": "Show Only Blocked Goals",
+        "category": "Goal Tree",
+        "icon": "$(stop)"
+      },
+      {
+        "command": "goalTree.showOnlyHighPriority",
+        "title": "Show Only High Priority Goals",
+        "category": "Goal Tree",
+        "icon": "$(flame)"
       }
     ],
     "views": {
@@ -178,6 +232,36 @@
           "command": "goalTree.refreshView",
           "when": "view == goalTreeView",
           "group": "navigation"
+        },
+        {
+          "command": "goalTree.expandAll",
+          "when": "view == goalTreeView",
+          "group": "navigation"
+        },
+        {
+          "command": "goalTree.collapseAll",
+          "when": "view == goalTreeView",
+          "group": "navigation"
+        },
+        {
+          "command": "goalTree.searchGoals",
+          "when": "view == goalTreeView",
+          "group": "navigation"
+        },
+        {
+          "command": "goalTree.toggleShowCompleted",
+          "when": "view == goalTreeView",
+          "group": "1_settings"
+        },
+        {
+          "command": "goalTree.toggleSortByTitle",
+          "when": "view == goalTreeView",
+          "group": "1_settings"
+        },
+        {
+          "command": "goalTree.filterByStatus",
+          "when": "view == goalTreeView",
+          "group": "2_filter"
         }
       ],
       "view/item/context": [
@@ -268,6 +352,78 @@
         }
       ]
     },
+    "keybindings": [
+      {
+        "command": "goalTree.createGoal",
+        "key": "ctrl+shift+g ctrl+n",
+        "mac": "cmd+shift+g cmd+n",
+        "when": "goalTree.enabled"
+      },
+      {
+        "command": "goalTree.createSubGoal",
+        "key": "ctrl+shift+g ctrl+s",
+        "mac": "cmd+shift+g cmd+s",
+        "when": "goalTree.enabled && view == goalTreeView"
+      },
+      {
+        "command": "goalTree.addTask",
+        "key": "ctrl+shift+g ctrl+t",
+        "mac": "cmd+shift+g cmd+t",
+        "when": "goalTree.enabled && view == goalTreeView"
+      },
+      {
+        "command": "goalTree.toggleTask",
+        "key": "space",
+        "when": "goalTree.enabled && view == goalTreeView && viewItem =~ /^task/"
+      },
+      {
+        "command": "goalTree.refreshView",
+        "key": "ctrl+shift+g r",
+        "mac": "cmd+shift+g r",
+        "when": "goalTree.enabled"
+      },
+      {
+        "command": "goalTree.openView",
+        "key": "ctrl+shift+g ctrl+o",
+        "mac": "cmd+shift+g cmd+o"
+      },
+      {
+        "command": "goalTree.searchGoals",
+        "key": "ctrl+shift+g ctrl+f",
+        "mac": "cmd+shift+g cmd+f",
+        "when": "goalTree.enabled"
+      },
+      {
+        "command": "goalTree.markInProgress",
+        "key": "ctrl+shift+g p",
+        "mac": "cmd+shift+g p",
+        "when": "goalTree.enabled && view == goalTreeView && viewItem =~ /^goal/"
+      },
+      {
+        "command": "goalTree.markCompleted",
+        "key": "ctrl+shift+g c",
+        "mac": "cmd+shift+g c",
+        "when": "goalTree.enabled && view == goalTreeView && viewItem =~ /^goal/"
+      },
+      {
+        "command": "goalTree.markBlocked",
+        "key": "ctrl+shift+g b",
+        "mac": "cmd+shift+g b",
+        "when": "goalTree.enabled && view == goalTreeView && viewItem =~ /^goal/"
+      },
+      {
+        "command": "goalTree.expandAll",
+        "key": "ctrl+shift+g e",
+        "mac": "cmd+shift+g e",
+        "when": "goalTree.enabled && view == goalTreeView"
+      },
+      {
+        "command": "goalTree.collapseAll",
+        "key": "ctrl+shift+g ctrl+e",
+        "mac": "cmd+shift+g cmd+e",
+        "when": "goalTree.enabled && view == goalTreeView"
+      }
+    ],
     "configuration": {
       "title": "Goal Tree",
       "properties": {
