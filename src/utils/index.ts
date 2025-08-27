@@ -17,6 +17,17 @@
 
 export { generateId, validateId } from './idGenerator';
 export { formatDate, parseDate, getRelativeTime, formatDuration } from './dateUtils';
+
+// Stream C: Hierarchy Validation (Issue #4)
+export { 
+    HierarchyValidators,
+    createHierarchyValidators,
+    validateHierarchyConfig,
+    DEFAULT_HIERARCHY_CONFIG,
+    type ValidationResult,
+    type CircularDependencyResult,
+    type HierarchyValidationConfig
+} from './HierarchyValidators';
 export { 
   validateGoal, 
   validateTask, 

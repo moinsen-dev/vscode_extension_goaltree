@@ -19,6 +19,24 @@ export { StorageService } from './storageService';
 export { StateManager } from './stateManager';
 export { DependencyService } from './dependencyService';
 
+// Stream C: Status & Hierarchy Management (Issue #4)
+export { 
+    GoalStatusManager, 
+    createGoalStatusManager,
+    type StatusTransitionResult,
+    type CascadeConfig,
+    type StatusChangeEvent
+} from './GoalStatusManager';
+export { 
+    GoalHierarchyManager, 
+    createGoalHierarchyManager,
+    type HierarchyOperationResult,
+    type MoveGoalParams,
+    type ReorderGoalsParams,
+    type HierarchyStatistics,
+    type HierarchyChangeEvent
+} from './GoalHierarchyManager';
+
 // Stream 2: Dependency Resolution Services
 export { 
     DependencyResolver, 
