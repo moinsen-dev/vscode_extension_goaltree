@@ -44,6 +44,14 @@ import {
 } from '../types';
 import { StorageService } from './storageService';
 import { ValidationService } from './ValidationService';
+import { 
+    ProgressCalculationUtils, 
+    ProgressResult, 
+    HierarchicalProgressResult,
+    ProgressCalculationStrategy,
+    ProgressDelta,
+    ProgressCalculationHelpers
+} from '../utils/progressCalculation';
 
 /**
  * Goal operation result interface
@@ -83,14 +91,16 @@ export class GoalManagerEventEmitter {
 }
 
 /**
- * Core GoalManager class with StorageService integration
+ * Core GoalManager class with StorageService integration and progress calculation
  */
 export class GoalManager {
     private readonly storageService: StorageService;
     private readonly validationService: ValidationService;
     private readonly eventEmitter: GoalManagerEventEmitter;
+    private readonly progressCalculator: ProgressCalculationUtils;
     private isDisposed = false;
     private goalCache: Map<string, Goal> = new Map();
+    private progressCache: Map<string, ProgressResult> = new Map();
     private cacheStale = true;
 
     constructor(
@@ -100,10 +110,21 @@ export class GoalManager {
         this.storageService = storageService;
         this.validationService = validationService || new ValidationService();
         this.eventEmitter = new GoalManagerEventEmitter();
+        this.progressCalculator = new ProgressCalculationUtils({
+            enableCaching: true,
+            cacheTtl: 60000, // 1 minute cache
+            performance: {
+                enableBatchProcessing: true,
+                batchSize: 50,
+                enableParallelProcessing: true,
+                maxConcurrentCalculations: 5
+            }
+        });
         
-        // Listen for storage changes to invalidate cache
+        // Listen for storage changes to invalidate caches
         this.storageService.onDataChange(() => {
             this.cacheStale = true;
+            this.progressCache.clear();
         });
     }
 
@@ -780,6 +801,9 @@ export class GoalManager {
             // Emit task added event
             await this.emitTaskAddedEvent(goalId, task, updatedGoal);
 
+            // Trigger progress calculation and parent goal updates
+            await this.handleTaskStatusChange(goalId, updatedGoal, TaskStatus.DONE, TaskStatus.TODO);
+
             return {
                 success: true,
                 data: task,
@@ -876,6 +900,9 @@ export class GoalManager {
             // Emit status change event if status changed
             if (updates.status && updates.status !== existingTask.status) {
                 await this.emitTaskStatusChangedEvent(goalId, taskId, existingTask.status, updates.status, updatedTask, updatedGoal);
+                
+                // Trigger progress calculation and parent goal updates
+                await this.handleTaskStatusChange(goalId, updatedGoal, existingTask.status, updates.status);
             }
 
             return {
@@ -951,6 +978,9 @@ export class GoalManager {
 
             // Emit task deleted event
             await this.emitTaskDeletedEvent(goalId, taskId, task, updatedGoal);
+
+            // Trigger progress calculation and parent goal updates (task was removed)
+            await this.handleTaskStatusChange(goalId, updatedGoal, task.status, TaskStatus.TODO);
 
             return {
                 success: true,
@@ -1182,6 +1212,279 @@ export class GoalManager {
         return changes;
     }
 
+    // ===========================================
+    // Progress Calculation & Goal Integration
+    // ===========================================
+
+    /**
+     * Calculate progress for a specific goal
+     */
+    async calculateGoalProgress(
+        goalId: string, 
+        strategy: ProgressCalculationStrategy = ProgressCalculationStrategy.TASK_COMPLETION
+    ): Promise<GoalOperationResult<ProgressResult>> {
+        if (this.isDisposed) {
+            return {
+                success: false,
+                error: 'GoalManager has been disposed',
+                timestamp: new Date(),
+                operation: 'calculateGoalProgress'
+            };
+        }
+
+        try {
+            const goalResult = await this.getGoal(goalId);
+            if (!goalResult.success || !goalResult.data) {
+                return {
+                    success: false,
+                    error: `Goal with id ${goalId} not found`,
+                    timestamp: new Date(),
+                    operation: 'calculateGoalProgress'
+                };
+            }
+
+            const progress = await this.progressCalculator.calculateTaskProgress(goalResult.data, strategy);
+
+            return {
+                success: true,
+                data: progress,
+                timestamp: new Date(),
+                operation: 'calculateGoalProgress'
+            };
+
+        } catch (error) {
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : String(error),
+                timestamp: new Date(),
+                operation: 'calculateGoalProgress'
+            };
+        }
+    }
+
+    /**
+     * Calculate hierarchical progress for a goal and its children
+     */
+    async calculateHierarchicalProgress(goalId: string): Promise<GoalOperationResult<HierarchicalProgressResult>> {
+        if (this.isDisposed) {
+            return {
+                success: false,
+                error: 'GoalManager has been disposed',
+                timestamp: new Date(),
+                operation: 'calculateHierarchicalProgress'
+            };
+        }
+
+        try {
+            const goalResult = await this.getGoal(goalId);
+            if (!goalResult.success || !goalResult.data) {
+                return {
+                    success: false,
+                    error: `Goal with id ${goalId} not found`,
+                    timestamp: new Date(),
+                    operation: 'calculateHierarchicalProgress'
+                };
+            }
+
+            const childGoalsResult = await this.getChildGoals(goalId);
+            const childGoals = childGoalsResult.success ? childGoalsResult.data || [] : [];
+
+            const hierarchicalProgress = await this.progressCalculator.calculateGoalProgress(
+                goalResult.data, 
+                childGoals
+            );
+
+            return {
+                success: true,
+                data: hierarchicalProgress,
+                timestamp: new Date(),
+                operation: 'calculateHierarchicalProgress'
+            };
+
+        } catch (error) {
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : String(error),
+                timestamp: new Date(),
+                operation: 'calculateHierarchicalProgress'
+            };
+        }
+    }
+
+    /**
+     * Update goal status based on progress calculation
+     */
+    async updateGoalStatusFromProgress(goalId: string): Promise<GoalOperationResult<Goal>> {
+        if (this.isDisposed) {
+            return {
+                success: false,
+                error: 'GoalManager has been disposed',
+                timestamp: new Date(),
+                operation: 'updateGoalStatusFromProgress'
+            };
+        }
+
+        try {
+            const goalResult = await this.getGoal(goalId);
+            if (!goalResult.success || !goalResult.data) {
+                return {
+                    success: false,
+                    error: `Goal with id ${goalId} not found`,
+                    timestamp: new Date(),
+                    operation: 'updateGoalStatusFromProgress'
+                };
+            }
+
+            const goal = goalResult.data;
+            const progressResult = await this.calculateGoalProgress(goalId);
+            
+            if (!progressResult.success || !progressResult.data) {
+                return {
+                    success: false,
+                    error: 'Failed to calculate goal progress',
+                    timestamp: new Date(),
+                    operation: 'updateGoalStatusFromProgress'
+                };
+            }
+
+            const suggestedStatus = this.progressCalculator.suggestGoalStatusUpdate(goal, progressResult.data);
+            
+            if (suggestedStatus && suggestedStatus !== goal.status) {
+                return await this.updateGoal(goalId, { status: suggestedStatus });
+            }
+
+            return {
+                success: true,
+                data: goal,
+                timestamp: new Date(),
+                operation: 'updateGoalStatusFromProgress'
+            };
+
+        } catch (error) {
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : String(error),
+                timestamp: new Date(),
+                operation: 'updateGoalStatusFromProgress'
+            };
+        }
+    }
+
+    /**
+     * Handle task status change and trigger progress recalculation
+     */
+    private async handleTaskStatusChange(
+        goalId: string, 
+        updatedGoal: Goal, 
+        previousStatus: TaskStatusType, 
+        newStatus: TaskStatusType
+    ): Promise<void> {
+        try {
+            // Calculate new progress for the goal
+            const progressResult = await this.progressCalculator.calculateTaskProgress(updatedGoal);
+
+            // Check if goal status should be updated based on progress
+            const suggestedStatus = this.progressCalculator.suggestGoalStatusUpdate(updatedGoal, progressResult);
+            
+            if (suggestedStatus && suggestedStatus !== updatedGoal.status) {
+                await this.updateGoal(goalId, { status: suggestedStatus });
+            }
+
+            // If goal is now complete, handle completion logic
+            if (this.progressCalculator.shouldGoalBeComplete(updatedGoal, progressResult)) {
+                await this.handleGoalCompletion(goalId);
+            }
+
+            // Propagate progress updates up the hierarchy
+            await this.propagateProgressUpdates(goalId);
+
+        } catch (error) {
+            // Log error but don't fail the task update
+            console.error('Failed to handle task status change:', error);
+        }
+    }
+
+    /**
+     * Propagate progress updates up the goal hierarchy
+     */
+    private async propagateProgressUpdates(goalId: string): Promise<void> {
+        try {
+            const goalResult = await this.getGoal(goalId);
+            if (!goalResult.success || !goalResult.data) {
+                return;
+            }
+
+            const goal = goalResult.data;
+            if (goal.parentId) {
+                // Update parent goal status based on child progress
+                await this.updateGoalStatusFromProgress(goal.parentId);
+                
+                // Continue propagating up the hierarchy
+                await this.propagateProgressUpdates(goal.parentId);
+            }
+
+        } catch (error) {
+            console.error('Failed to propagate progress updates:', error);
+        }
+    }
+
+    /**
+     * Get progress information for multiple goals efficiently
+     */
+    async getGoalsProgress(goalIds: string[]): Promise<GoalOperationResult<Map<string, ProgressResult>>> {
+        if (this.isDisposed) {
+            return {
+                success: false,
+                error: 'GoalManager has been disposed',
+                timestamp: new Date(),
+                operation: 'getGoalsProgress'
+            };
+        }
+
+        try {
+            const goals: Goal[] = [];
+            
+            for (const goalId of goalIds) {
+                const goalResult = await this.getGoal(goalId);
+                if (goalResult.success && goalResult.data) {
+                    goals.push(goalResult.data);
+                }
+            }
+
+            const progressResults = await this.progressCalculator.calculateProgressOptimized(goals);
+
+            return {
+                success: true,
+                data: progressResults,
+                timestamp: new Date(),
+                operation: 'getGoalsProgress'
+            };
+
+        } catch (error) {
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : String(error),
+                timestamp: new Date(),
+                operation: 'getGoalsProgress'
+            };
+        }
+    }
+
+    /**
+     * Clear progress calculation cache
+     */
+    clearProgressCache(): void {
+        this.progressCache.clear();
+        this.progressCalculator.clearCache();
+    }
+
+    /**
+     * Get progress calculation statistics
+     */
+    getProgressCacheStats(): { size: number; hitRate: number } {
+        return this.progressCalculator.getCacheStats();
+    }
+
     /**
      * Dispose of resources
      */
@@ -1189,6 +1492,8 @@ export class GoalManager {
         if (this.isDisposed) return;
 
         this.goalCache.clear();
+        this.progressCache.clear();
+        this.progressCalculator.clearCache();
         this.eventEmitter.dispose();
         this.isDisposed = true;
     }
