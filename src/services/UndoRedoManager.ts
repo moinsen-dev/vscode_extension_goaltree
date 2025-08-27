@@ -18,8 +18,11 @@ import {
     UpdateTaskParams,
     GoalEvent,
     GoalEventType,
-    GoalEventUtils
+    GoalEventUtils,
+    GoalStatusType,
+    TaskStatusType
 } from '../types';
+import { GoalManager } from './GoalManager';
 
 /**
  * Base interface for all undoable commands
@@ -682,6 +685,190 @@ export class UndoRedoManager {
     private logError(message: string, error: unknown): void {
         const errorMessage = error instanceof Error ? error.message : String(error);
         this.logger(`ERROR: ${message} - ${errorMessage}`);
+    }
+
+    // ===========================================
+    // Goal-Specific Integration Methods
+    // ===========================================
+
+    /**
+     * Create a snapshot of current goal state for complex operations
+     */
+    createGoalSnapshot(description: string, goalManager: GoalManager): Promise<string> {
+        return new Promise(async (resolve, reject) => {
+            try {
+                const allGoalsResult = await goalManager.getAllGoals();
+                if (!allGoalsResult.success || !allGoalsResult.data) {
+                    reject(new Error('Failed to capture goals for snapshot'));
+                    return;
+                }
+
+                const goalStates = new Map<string, Goal>();
+                for (const goal of allGoalsResult.data) {
+                    goalStates.set(goal.id, { ...goal });
+                }
+
+                const snapshotId = this.createSnapshot(description, goalStates);
+                resolve(snapshotId);
+            } catch (error) {
+                reject(error);
+            }
+        });
+    }
+
+    /**
+     * Get command history filtered by goal IDs
+     */
+    getGoalCommandHistory(goalIds?: string[]): Array<{ item: UndoableCommand | CommandGroup; stack: 'undo' | 'redo' }> {
+        const allHistory = this.getCommandHistory();
+        
+        if (!goalIds || goalIds.length === 0) {
+            return allHistory;
+        }
+
+        return allHistory.filter(({ item }) => {
+            if (this.isCommandGroup(item)) {
+                // Check if any command in the group affects the specified goals
+                return item.commands.some(cmd => 
+                    cmd.affectedGoalIds.some(id => goalIds.includes(id))
+                );
+            } else {
+                // Check if command affects the specified goals
+                return item.affectedGoalIds.some(id => goalIds.includes(id));
+            }
+        });
+    }
+
+    /**
+     * Check if there are any undoable operations that affect specific goals
+     */
+    canUndoForGoals(goalIds: string[]): boolean {
+        if (!this.canUndo()) return false;
+
+        const goalHistory = this.getGoalCommandHistory(goalIds);
+        return goalHistory.some(({ stack }) => stack === 'undo');
+    }
+
+    /**
+     * Check if there are any redoable operations that affect specific goals
+     */
+    canRedoForGoals(goalIds: string[]): boolean {
+        if (!this.canRedo()) return false;
+
+        const goalHistory = this.getGoalCommandHistory(goalIds);
+        return goalHistory.some(({ stack }) => stack === 'redo');
+    }
+
+    /**
+     * Get undo description for operations affecting specific goals
+     */
+    getGoalUndoDescription(goalIds?: string[]): string | null {
+        if (!this.canUndo()) return null;
+
+        const item = this.undoStack[this.undoStack.length - 1];
+        
+        if (goalIds && goalIds.length > 0) {
+            if (this.isCommandGroup(item)) {
+                const hasRelevantCommand = item.commands.some(cmd => 
+                    cmd.affectedGoalIds.some(id => goalIds.includes(id))
+                );
+                return hasRelevantCommand ? item.description : null;
+            } else {
+                const hasRelevantGoal = item.affectedGoalIds.some(id => goalIds.includes(id));
+                return hasRelevantGoal ? item.description : null;
+            }
+        }
+
+        return item.description;
+    }
+
+    /**
+     * Get redo description for operations affecting specific goals
+     */
+    getGoalRedoDescription(goalIds?: string[]): string | null {
+        if (!this.canRedo()) return null;
+
+        const item = this.redoStack[this.redoStack.length - 1];
+        
+        if (goalIds && goalIds.length > 0) {
+            if (this.isCommandGroup(item)) {
+                const hasRelevantCommand = item.commands.some(cmd => 
+                    cmd.affectedGoalIds.some(id => goalIds.includes(id))
+                );
+                return hasRelevantCommand ? item.description : null;
+            } else {
+                const hasRelevantGoal = item.affectedGoalIds.some(id => goalIds.includes(id));
+                return hasRelevantGoal ? item.description : null;
+            }
+        }
+
+        return item.description;
+    }
+
+    /**
+     * Get statistics about command history
+     */
+    getUndoRedoStats(): {
+        totalCommands: number;
+        undoableCommands: number;
+        redoableCommands: number;
+        commandGroups: number;
+        snapshots: number;
+        memoryUsage: {
+            undoStack: number;
+            redoStack: number;
+            snapshots: number;
+        };
+    } {
+        const undoGroups = this.undoStack.filter(item => this.isCommandGroup(item)).length;
+        const redoGroups = this.redoStack.filter(item => this.isCommandGroup(item)).length;
+
+        return {
+            totalCommands: this.undoStack.length + this.redoStack.length,
+            undoableCommands: this.undoStack.length,
+            redoableCommands: this.redoStack.length,
+            commandGroups: undoGroups + redoGroups,
+            snapshots: this.stateSnapshots.length,
+            memoryUsage: {
+                undoStack: this.undoStack.length,
+                redoStack: this.redoStack.length,
+                snapshots: this.stateSnapshots.length
+            }
+        };
+    }
+
+    /**
+     * Clear undo/redo history for specific goals
+     */
+    clearGoalHistory(goalIds: string[]): number {
+        const originalUndoSize = this.undoStack.length;
+        const originalRedoSize = this.redoStack.length;
+
+        // Filter out commands affecting the specified goals
+        this.undoStack = this.undoStack.filter(item => {
+            if (this.isCommandGroup(item)) {
+                return !item.commands.some(cmd => 
+                    cmd.affectedGoalIds.some(id => goalIds.includes(id))
+                );
+            } else {
+                return !item.affectedGoalIds.some(id => goalIds.includes(id));
+            }
+        });
+
+        this.redoStack = this.redoStack.filter(item => {
+            if (this.isCommandGroup(item)) {
+                return !item.commands.some(cmd => 
+                    cmd.affectedGoalIds.some(id => goalIds.includes(id))
+                );
+            } else {
+                return !item.affectedGoalIds.some(id => goalIds.includes(id));
+            }
+        });
+
+        const removedCommands = (originalUndoSize + originalRedoSize) - (this.undoStack.length + this.redoStack.length);
+        this.log(`Cleared ${removedCommands} commands for ${goalIds.length} goals`);
+        
+        return removedCommands;
     }
 
     // ===========================================

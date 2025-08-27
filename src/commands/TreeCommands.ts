@@ -14,19 +14,25 @@ import { GoalTreeProvider } from '../providers/goalTreeProvider';
 import { ChangeNotificationService } from '../services/ChangeNotificationService';
 import { createLogger } from '../utils/logger';
 import { TREE_CONTEXT_VALUES } from '../types/TreeTypes';
+import { GoalUndoRedoService } from '../services/GoalUndoRedoService';
+import { UndoRedoManager } from '../services/UndoRedoManager';
 
 /**
  * Tree command handler class - manages all tree-related commands
  */
 export class TreeCommands {
     private logger = createLogger('TreeCommands');
+    private undoRedoService?: GoalUndoRedoService;
 
     constructor(
         private stateManager: StateManager,
         private goalManager: GoalManager,
         private treeProvider: GoalTreeProvider,
-        private changeNotificationService: ChangeNotificationService
-    ) {}
+        private changeNotificationService: ChangeNotificationService,
+        undoRedoService?: GoalUndoRedoService
+    ) {
+        this.undoRedoService = undoRedoService;
+    }
 
     /**
      * Register all tree commands with VS Code
@@ -94,7 +100,15 @@ export class TreeCommands {
             { id: 'goalTree.focusGoal', handler: this.focusGoal.bind(this), category: 'Navigation' },
             { id: 'goalTree.exportGoal', handler: this.exportGoal.bind(this), category: 'Data Management' },
             { id: 'goalTree.importGoals', handler: this.importGoals.bind(this), category: 'Data Management' },
-            { id: 'goalTree.exportAll', handler: this.exportAll.bind(this), category: 'Data Management' }
+            { id: 'goalTree.exportAll', handler: this.exportAll.bind(this), category: 'Data Management' },
+
+            // Undo/Redo commands
+            { id: 'goalTree.undo', handler: this.undo.bind(this), category: 'Undo/Redo' },
+            { id: 'goalTree.redo', handler: this.redo.bind(this), category: 'Undo/Redo' },
+            { id: 'goalTree.showUndoHistory', handler: this.showUndoHistory.bind(this), category: 'Undo/Redo' },
+            { id: 'goalTree.clearUndoHistory', handler: this.clearUndoHistory.bind(this), category: 'Undo/Redo' },
+            { id: 'goalTree.createSnapshot', handler: this.createSnapshot.bind(this), category: 'Undo/Redo' },
+            { id: 'goalTree.showSnapshots', handler: this.showSnapshots.bind(this), category: 'Undo/Redo' }
         ];
 
         const registeredCommands: vscode.Disposable[] = [];
@@ -1463,5 +1477,279 @@ export class TreeCommands {
         }
         
         return this.isDescendant(ancestorId, descendant.parentId);
+    }
+
+    // ===========================================
+    // Undo/Redo Command Implementations
+    // ===========================================
+
+    /**
+     * Undo the last operation
+     */
+    async undo(): Promise<void> {
+        try {
+            if (!this.undoRedoService) {
+                vscode.window.showWarningMessage('Undo/Redo service is not available');
+                return;
+            }
+
+            if (!this.undoRedoService.canUndo()) {
+                vscode.window.showInformationMessage('Nothing to undo');
+                return;
+            }
+
+            const undoDescription = this.undoRedoService.getUndoDescription();
+            const result = await this.undoRedoService.undo();
+
+            if (result.success) {
+                this.treeProvider.refresh();
+                const message = undoDescription ? `Undone: ${undoDescription}` : 'Operation undone';
+                vscode.window.showInformationMessage(message);
+                this.logger.info('Undo completed successfully', { 
+                    commandsProcessed: result.commandsProcessed,
+                    description: undoDescription 
+                });
+            } else {
+                vscode.window.showErrorMessage(`Undo failed: ${result.error}`);
+                this.logger.error('Undo operation failed', { error: result.error });
+            }
+
+        } catch (error) {
+            this.logger.error('Failed to undo operation', error);
+            vscode.window.showErrorMessage(`Undo failed: ${error}`);
+        }
+    }
+
+    /**
+     * Redo the last undone operation
+     */
+    async redo(): Promise<void> {
+        try {
+            if (!this.undoRedoService) {
+                vscode.window.showWarningMessage('Undo/Redo service is not available');
+                return;
+            }
+
+            if (!this.undoRedoService.canRedo()) {
+                vscode.window.showInformationMessage('Nothing to redo');
+                return;
+            }
+
+            const redoDescription = this.undoRedoService.getRedoDescription();
+            const result = await this.undoRedoService.redo();
+
+            if (result.success) {
+                this.treeProvider.refresh();
+                const message = redoDescription ? `Redone: ${redoDescription}` : 'Operation redone';
+                vscode.window.showInformationMessage(message);
+                this.logger.info('Redo completed successfully', { 
+                    commandsProcessed: result.commandsProcessed,
+                    description: redoDescription 
+                });
+            } else {
+                vscode.window.showErrorMessage(`Redo failed: ${result.error}`);
+                this.logger.error('Redo operation failed', { error: result.error });
+            }
+
+        } catch (error) {
+            this.logger.error('Failed to redo operation', error);
+            vscode.window.showErrorMessage(`Redo failed: ${error}`);
+        }
+    }
+
+    /**
+     * Show undo/redo history
+     */
+    async showUndoHistory(): Promise<void> {
+        try {
+            if (!this.undoRedoService) {
+                vscode.window.showWarningMessage('Undo/Redo service is not available');
+                return;
+            }
+
+            const undoRedoManager = this.undoRedoService.getUndoRedoManager();
+            const history = undoRedoManager.getCommandHistory();
+            const stats = undoRedoManager.getUndoRedoStats();
+
+            if (history.length === 0) {
+                vscode.window.showInformationMessage('No undo/redo history available');
+                return;
+            }
+
+            // Create quick pick items for history
+            const items = history.map((entry, index) => {
+                const isGroup = undoRedoManager['isCommandGroup'](entry.item);
+                const icon = entry.stack === 'undo' ? '$(arrow-left)' : '$(arrow-right)';
+                const stackLabel = entry.stack === 'undo' ? 'Can Undo' : 'Can Redo';
+                
+                let detail = '';
+                if (isGroup) {
+                    const group = entry.item as any;
+                    detail = `${group.commands.length} operations • ${group.timestamp.toLocaleString()}`;
+                } else {
+                    const command = entry.item as any;
+                    detail = `Single operation • ${command.timestamp.toLocaleString()}`;
+                }
+
+                return {
+                    label: `${icon} ${entry.item.description}`,
+                    description: stackLabel,
+                    detail,
+                    stack: entry.stack,
+                    index
+                };
+            });
+
+            // Add stats header
+            const statsItem = {
+                label: `$(info) History Statistics`,
+                description: `${stats.undoableCommands} undoable, ${stats.redoableCommands} redoable`,
+                detail: `Total: ${stats.totalCommands} operations, ${stats.snapshots} snapshots`,
+                stack: 'info' as const,
+                index: -1
+            };
+
+            const allItems = [statsItem, ...items];
+
+            const selected = await vscode.window.showQuickPick(allItems, {
+                placeHolder: 'Select an operation to jump to (or view history)',
+                matchOnDescription: true,
+                matchOnDetail: true
+            });
+
+            if (selected && selected.stack !== 'info') {
+                // For now, just show info. In future could implement "jump to" functionality
+                vscode.window.showInformationMessage(`Selected: ${selected.label.replace(/\$\(.*?\)\s/, '')}`);
+            }
+
+        } catch (error) {
+            this.logger.error('Failed to show undo history', error);
+            vscode.window.showErrorMessage(`Failed to show undo history: ${error}`);
+        }
+    }
+
+    /**
+     * Clear all undo/redo history
+     */
+    async clearUndoHistory(): Promise<void> {
+        try {
+            if (!this.undoRedoService) {
+                vscode.window.showWarningMessage('Undo/Redo service is not available');
+                return;
+            }
+
+            const stats = this.undoRedoService.getStats();
+            
+            if (stats.totalCommands === 0) {
+                vscode.window.showInformationMessage('No undo/redo history to clear');
+                return;
+            }
+
+            const confirmation = await vscode.window.showWarningMessage(
+                `Are you sure you want to clear all undo/redo history? This will remove ${stats.totalCommands} operations and ${stats.snapshots} snapshots.`,
+                { modal: true },
+                'Clear History'
+            );
+
+            if (confirmation === 'Clear History') {
+                this.undoRedoService.clearHistory();
+                vscode.window.showInformationMessage('Undo/redo history cleared');
+                this.logger.info('Undo/redo history cleared', { 
+                    operationsCleared: stats.totalCommands,
+                    snapshotsCleared: stats.snapshots 
+                });
+            }
+
+        } catch (error) {
+            this.logger.error('Failed to clear undo history', error);
+            vscode.window.showErrorMessage(`Failed to clear undo history: ${error}`);
+        }
+    }
+
+    /**
+     * Create a manual snapshot
+     */
+    async createSnapshot(): Promise<void> {
+        try {
+            if (!this.undoRedoService) {
+                vscode.window.showWarningMessage('Undo/Redo service is not available');
+                return;
+            }
+
+            const description = await vscode.window.showInputBox({
+                prompt: 'Enter a description for this snapshot',
+                placeHolder: 'e.g., Before major reorganization...',
+                validateInput: (value) => {
+                    if (!value.trim()) {
+                        return 'Snapshot description cannot be empty';
+                    }
+                    if (value.length > 100) {
+                        return 'Description must be 100 characters or less';
+                    }
+                    return null;
+                }
+            });
+
+            if (!description) {
+                return; // User cancelled
+            }
+
+            const snapshotId = await this.undoRedoService.createSnapshot(description.trim());
+            vscode.window.showInformationMessage(`Snapshot created: ${description}`);
+            this.logger.info('Manual snapshot created', { snapshotId, description });
+
+        } catch (error) {
+            this.logger.error('Failed to create snapshot', error);
+            vscode.window.showErrorMessage(`Failed to create snapshot: ${error}`);
+        }
+    }
+
+    /**
+     * Show available snapshots
+     */
+    async showSnapshots(): Promise<void> {
+        try {
+            if (!this.undoRedoService) {
+                vscode.window.showWarningMessage('Undo/Redo service is not available');
+                return;
+            }
+
+            const undoRedoManager = this.undoRedoService.getUndoRedoManager();
+            const snapshots = undoRedoManager.getSnapshots();
+
+            if (snapshots.length === 0) {
+                vscode.window.showInformationMessage('No snapshots available');
+                return;
+            }
+
+            const items = snapshots
+                .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()) // Most recent first
+                .map((snapshot, index) => ({
+                    label: `$(archive) ${snapshot.description}`,
+                    description: snapshot.timestamp.toLocaleString(),
+                    detail: `${snapshot.goalStates.size} goals captured`,
+                    snapshotId: snapshot.id,
+                    index
+                }));
+
+            const selected = await vscode.window.showQuickPick(items, {
+                placeHolder: 'View snapshots (rollback functionality coming soon)',
+                matchOnDescription: true,
+                matchOnDetail: true
+            });
+
+            if (selected) {
+                // For now, just show info. Future: implement rollback functionality
+                const snapshot = snapshots.find(s => s.id === selected.snapshotId);
+                if (snapshot) {
+                    const message = `Snapshot: ${snapshot.description}\nCreated: ${snapshot.timestamp.toLocaleString()}\nGoals captured: ${snapshot.goalStates.size}`;
+                    vscode.window.showInformationMessage(message);
+                }
+            }
+
+        } catch (error) {
+            this.logger.error('Failed to show snapshots', error);
+            vscode.window.showErrorMessage(`Failed to show snapshots: ${error}`);
+        }
     }
 }
