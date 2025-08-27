@@ -2,6 +2,8 @@
 name: goal-tree
 status: backlog
 created: 2025-08-26T08:10:57Z
+updated: 2025-08-26T18:49:23Z
+last_sync: 2025-08-26T18:49:23Z
 progress: 0%
 prd: .claude/prds/goal-tree.md
 github: https://github.com/moinsen-dev/vscode_extension_goaltree/issues/1
