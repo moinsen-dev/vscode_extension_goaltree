@@ -15,6 +15,13 @@
  */
 
 export { GoalManager } from './goalManager';
+export { TaskManager, 
+         createTaskManager,
+         type TaskOperationResult,
+         type TaskSearchParams,
+         type TaskStatistics,
+         type ReorderTasksParams,
+         type BulkTaskOperation } from './TaskManager';
 export { StorageService, 
          createStorageService, 
          StorageServiceUtils,
