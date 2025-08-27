@@ -10,6 +10,9 @@ import { Goal, Task, GoalStatus, TaskStatus, TaskStatusType } from '../types/Goa
 import { TREE_CONTEXT_VALUES } from '../types/TreeTypes';
 import { StateManager } from '../services/stateManager';
 import { GoalManager } from '../services/goalManager';
+import { TaskManager } from '../services/TaskManager';
+import { BulkTaskOperations } from '../services/BulkTaskOperations';
+import { GoalTreeProvider } from './GoalTreeProvider';
 import { createLogger } from '../utils/logger';
 
 /**
@@ -46,7 +49,10 @@ export class TreeContextMenuProvider {
 
     constructor(
         private stateManager: StateManager,
-        private goalManager: GoalManager
+        private goalManager: GoalManager,
+        private taskManager: TaskManager,
+        private bulkTaskOperations: BulkTaskOperations,
+        private goalTreeProvider?: GoalTreeProvider
     ) {}
 
     /**
@@ -218,8 +224,16 @@ export class TreeContextMenuProvider {
             group: MENU_GROUPS.EDIT
         });
 
-        // Status items
-        const statusItems = this.getTaskStatusMenuItems(task);
+        // Duplicate task
+        items.push({
+            command: 'goalTree.duplicateTask',
+            title: 'Duplicate Task',
+            icon: 'copy',
+            group: MENU_GROUPS.EDIT
+        });
+
+        // Enhanced status items
+        const statusItems = this.getEnhancedTaskStatusMenuItems(task);
         items.push(...statusItems);
 
         // Move items (if multiple tasks exist)
@@ -243,7 +257,47 @@ export class TreeContextMenuProvider {
                     group: MENU_GROUPS.MOVE
                 });
             }
+
+            // Advanced move options
+            items.push({
+                command: 'goalTree.moveTaskToTop',
+                title: 'Move to Top',
+                icon: 'arrow-up',
+                group: MENU_GROUPS.MOVE,
+                enabled: taskIndex > 0
+            });
+
+            items.push({
+                command: 'goalTree.moveTaskToBottom',
+                title: 'Move to Bottom',
+                icon: 'arrow-down',
+                group: MENU_GROUPS.MOVE,
+                enabled: taskIndex < goal.tasks.length - 1
+            });
         }
+
+        // Task conversion and organization
+        items.push({
+            command: 'goalTree.convertTaskToGoal',
+            title: 'Convert to Goal',
+            icon: 'target',
+            group: MENU_GROUPS.EDIT
+        });
+
+        // View and utility items
+        items.push({
+            command: 'goalTree.showTaskDetails',
+            title: 'Show Details',
+            icon: 'info',
+            group: MENU_GROUPS.VIEW
+        });
+
+        items.push({
+            command: 'goalTree.copyTaskId',
+            title: 'Copy Task ID',
+            icon: 'clippy',
+            group: MENU_GROUPS.VIEW
+        });
 
         // Delete item (always last)
         items.push({
@@ -293,12 +347,12 @@ export class TreeContextMenuProvider {
     }
 
     /**
-     * Get status menu items for tasks (only show applicable status changes)
+     * Get enhanced status menu items for tasks with bulk operation support
      */
-    private getTaskStatusMenuItems(task: Task): ContextMenuItem[] {
+    private getEnhancedTaskStatusMenuItems(task: Task): ContextMenuItem[] {
         const items: ContextMenuItem[] = [];
         
-        // For tasks, we provide a toggle action and specific status changes
+        // Primary toggle action
         items.push({
             command: 'goalTree.toggleTask',
             title: this.getTaskToggleTitle(task.status),
@@ -306,23 +360,57 @@ export class TreeContextMenuProvider {
             group: MENU_GROUPS.STATUS
         });
 
-        // Add specific status options if different from current
-        const statusOptions: Array<{status: TaskStatus, title: string, icon: string}> = [
-            { status: TaskStatus.TODO, title: 'Mark as To Do', icon: 'circle-outline' },
-            { status: TaskStatus.IN_PROGRESS, title: 'Mark as In Progress', icon: 'play' },
-            { status: TaskStatus.DONE, title: 'Mark as Done', icon: 'check' }
-        ];
-
-        statusOptions
-            .filter(option => option.status !== task.status)
-            .forEach(option => {
-                items.push({
-                    command: 'goalTree.setTaskStatus',
-                    title: option.title,
-                    icon: option.icon,
-                    group: MENU_GROUPS.STATUS
-                });
-            });
+        // Quick status changes based on current status
+        switch (task.status) {
+            case TaskStatus.TODO:
+                items.push(
+                    {
+                        command: 'goalTree.startTask',
+                        title: 'Start Task',
+                        icon: 'play',
+                        group: MENU_GROUPS.STATUS
+                    },
+                    {
+                        command: 'goalTree.completeTask',
+                        title: 'Mark Complete',
+                        icon: 'check',
+                        group: MENU_GROUPS.STATUS
+                    }
+                );
+                break;
+            case TaskStatus.IN_PROGRESS:
+                items.push(
+                    {
+                        command: 'goalTree.completeTask',
+                        title: 'Complete Task',
+                        icon: 'check',
+                        group: MENU_GROUPS.STATUS
+                    },
+                    {
+                        command: 'goalTree.pauseTask',
+                        title: 'Pause Task',
+                        icon: 'circle-outline',
+                        group: MENU_GROUPS.STATUS
+                    }
+                );
+                break;
+            case TaskStatus.DONE:
+                items.push(
+                    {
+                        command: 'goalTree.reopenTask',
+                        title: 'Reopen Task',
+                        icon: 'undo',
+                        group: MENU_GROUPS.STATUS
+                    },
+                    {
+                        command: 'goalTree.restartTask',
+                        title: 'Restart Task',
+                        icon: 'play',
+                        group: MENU_GROUPS.STATUS
+                    }
+                );
+                break;
+        }
 
         return items;
     }
@@ -739,10 +827,267 @@ export class TreeContextMenuProvider {
         this.logger.info('TreeContextMenuProvider initialized');
     }
 
+    // ===========================================
+    // Enhanced Task Context Menu Actions
+    // ===========================================
+
+    /**
+     * Execute task context menu command with proper integration
+     */
+    async executeTaskCommand(command: string, goalId: string, taskId: string): Promise<boolean> {
+        if (!this.goalTreeProvider) {
+            this.logger.warn('GoalTreeProvider not available for task command execution');
+            return false;
+        }
+
+        try {
+            switch (command) {
+                case 'goalTree.toggleTask':
+                    return await this.goalTreeProvider.toggleTaskStatus(goalId, taskId);
+                
+                case 'goalTree.editTask':
+                    return await this.goalTreeProvider.editTask(goalId, taskId);
+                
+                case 'goalTree.deleteTask':
+                    return await this.goalTreeProvider.deleteTask(goalId, taskId);
+                
+                case 'goalTree.moveTaskUp':
+                    return await this.goalTreeProvider.moveTaskUp(goalId, taskId);
+                
+                case 'goalTree.moveTaskDown':
+                    return await this.goalTreeProvider.moveTaskDown(goalId, taskId);
+                
+                case 'goalTree.startTask':
+                case 'goalTree.completeTask':
+                case 'goalTree.pauseTask':
+                case 'goalTree.reopenTask':
+                case 'goalTree.restartTask':
+                    return await this.handleTaskStatusCommand(command, goalId, taskId);
+                
+                case 'goalTree.duplicateTask':
+                    return await this.duplicateTask(goalId, taskId);
+                
+                case 'goalTree.moveTaskToTop':
+                    return await this.moveTaskToPosition(goalId, taskId, 0);
+                
+                case 'goalTree.moveTaskToBottom':
+                    return await this.moveTaskToPosition(goalId, taskId, -1);
+                
+                case 'goalTree.convertTaskToGoal':
+                    return await this.convertTaskToGoal(goalId, taskId);
+                
+                case 'goalTree.showTaskDetails':
+                    return this.showTaskDetails(goalId, taskId);
+                
+                case 'goalTree.copyTaskId':
+                    return this.copyTaskId(taskId);
+                
+                default:
+                    this.logger.warn(`Unknown task command: ${command}`);
+                    return false;
+            }
+        } catch (error) {
+            this.logger.error(`Error executing task command ${command}`, error);
+            vscode.window.showErrorMessage(`Failed to execute command: ${error instanceof Error ? error.message : String(error)}`);
+            return false;
+        }
+    }
+
+    /**
+     * Handle specific task status change commands
+     */
+    private async handleTaskStatusCommand(command: string, goalId: string, taskId: string): Promise<boolean> {
+        let targetStatus: 'todo' | 'in-progress' | 'done';
+
+        switch (command) {
+            case 'goalTree.startTask':
+            case 'goalTree.restartTask':
+                targetStatus = 'in-progress';
+                break;
+            case 'goalTree.completeTask':
+                targetStatus = 'done';
+                break;
+            case 'goalTree.pauseTask':
+            case 'goalTree.reopenTask':
+                targetStatus = 'todo';
+                break;
+            default:
+                return false;
+        }
+
+        return await this.goalTreeProvider!.setTaskStatus(goalId, taskId, targetStatus);
+    }
+
+    /**
+     * Duplicate a task within the same goal
+     */
+    private async duplicateTask(goalId: string, taskId: string): Promise<boolean> {
+        try {
+            const goal = this.stateManager.getGoal(goalId);
+            if (!goal) {
+                vscode.window.showErrorMessage('Goal not found');
+                return false;
+            }
+
+            const task = goal.tasks.find(t => t.id === taskId);
+            if (!task) {
+                vscode.window.showErrorMessage('Task not found');
+                return false;
+            }
+
+            const result = await this.taskManager.createTask(goalId, {
+                title: `${task.title} (Copy)`,
+                description: task.description,
+                goalId: goalId
+            });
+
+            if (result.success) {
+                vscode.window.showInformationMessage(`Task "${task.title}" duplicated`);
+                return true;
+            } else {
+                vscode.window.showErrorMessage(`Failed to duplicate task: ${result.error}`);
+                return false;
+            }
+        } catch (error) {
+            this.logger.error('Error duplicating task', error);
+            vscode.window.showErrorMessage('Failed to duplicate task');
+            return false;
+        }
+    }
+
+    /**
+     * Move task to specific position
+     */
+    private async moveTaskToPosition(goalId: string, taskId: string, position: number): Promise<boolean> {
+        try {
+            const goal = this.stateManager.getGoal(goalId);
+            if (!goal) {
+                return false;
+            }
+
+            const targetOrder = position === -1 ? goal.tasks.length - 1 : position;
+            const result = await this.taskManager.setTaskOrder(taskId, targetOrder);
+            
+            if (result.success) {
+                this.goalTreeProvider?.refresh();
+                return true;
+            }
+            
+            return false;
+        } catch (error) {
+            this.logger.error('Error moving task to position', error);
+            return false;
+        }
+    }
+
+    /**
+     * Convert task to goal (placeholder for future implementation)
+     */
+    private async convertTaskToGoal(goalId: string, taskId: string): Promise<boolean> {
+        try {
+            const goal = this.stateManager.getGoal(goalId);
+            if (!goal) {
+                return false;
+            }
+
+            const task = goal.tasks.find(t => t.id === taskId);
+            if (!task) {
+                return false;
+            }
+
+            const confirmation = await vscode.window.showWarningMessage(
+                `Convert task "${task.title}" to a new goal? This will remove it from the current goal.`,
+                { modal: true },
+                'Convert',
+                'Cancel'
+            );
+
+            if (confirmation !== 'Convert') {
+                return false;
+            }
+
+            // This is a placeholder - would need to integrate with GoalManager
+            // to create a new goal and remove the task
+            vscode.window.showInformationMessage('Task to goal conversion is not yet implemented');
+            return false;
+        } catch (error) {
+            this.logger.error('Error converting task to goal', error);
+            return false;
+        }
+    }
+
+    /**
+     * Show detailed task information
+     */
+    private showTaskDetails(goalId: string, taskId: string): boolean {
+        try {
+            const goal = this.stateManager.getGoal(goalId);
+            if (!goal) {
+                return false;
+            }
+
+            const task = goal.tasks.find(t => t.id === taskId);
+            if (!task) {
+                return false;
+            }
+
+            const details = [
+                `📋 ${task.title}`,
+                '',
+                `Status: ${task.status}`,
+                `Created: ${task.createdAt.toLocaleDateString()}`,
+                task.completedAt ? `Completed: ${task.completedAt.toLocaleDateString()}` : '',
+                `Order: #${(task.order || 0) + 1}`,
+                `Goal: ${goal.title}`,
+                '',
+                task.description ? `📝 ${task.description}` : 'No description',
+                '',
+                `Task ID: ${task.id}`
+            ].filter(line => line !== '').join('\n');
+
+            vscode.window.showInformationMessage(details, { modal: true });
+            return true;
+        } catch (error) {
+            this.logger.error('Error showing task details', error);
+            return false;
+        }
+    }
+
+    /**
+     * Copy task ID to clipboard
+     */
+    private copyTaskId(taskId: string): boolean {
+        try {
+            vscode.env.clipboard.writeText(taskId);
+            vscode.window.showInformationMessage(`Task ID copied to clipboard: ${taskId}`);
+            return true;
+        } catch (error) {
+            this.logger.error('Error copying task ID', error);
+            vscode.window.showErrorMessage('Failed to copy task ID');
+            return false;
+        }
+    }
+
+    /**
+     * Get bulk task operations for external access
+     */
+    getBulkTaskOperations(): BulkTaskOperations {
+        return this.bulkTaskOperations;
+    }
+
+    /**
+     * Set the goal tree provider reference for command execution
+     */
+    setGoalTreeProvider(provider: GoalTreeProvider): void {
+        this.goalTreeProvider = provider;
+    }
+
     /**
      * Dispose of resources used by the context menu provider
      */
     dispose(): void {
+        this.taskManager?.dispose();
+        this.bulkTaskOperations?.dispose();
         this.logger.info('TreeContextMenuProvider disposed');
     }
 }
