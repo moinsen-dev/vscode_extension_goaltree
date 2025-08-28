@@ -34,7 +34,22 @@ export type ExtensionCommand =
   | 'goalTree.editGoal'
   | 'goalTree.toggleGoalStatus'
   | 'goalTree.exportGoals'
-  | 'goalTree.importGoals';
+  | 'goalTree.importGoals'
+  // Goal and task selection commands
+  | 'goalTree.selectGoal'
+  | 'goalTree.selectTask'
+  | 'goalTree.refreshTree'
+  // Dependency management commands
+  | 'goalTree.addDependency'
+  | 'goalTree.removeDependency'
+  | 'goalTree.showDependencies'
+  | 'goalTree.manageDependencies'
+  | 'goalTree.checkCircularDependencies'
+  // Task management commands
+  | 'goalTree.addTask'
+  | 'goalTree.editTask'
+  | 'goalTree.deleteTask'
+  | 'goalTree.toggleTaskStatus';
 
 /**
  * Command handler function type

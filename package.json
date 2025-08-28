@@ -1,0 +1,246 @@
+{
+  "name": "goaltree",
+  "displayName": "Goal Tree",
+  "description": "Hierarchical goal tracking and dependency management for VS Code",
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other",
+    "Notebooks"
+  ],
+  "keywords": [
+    "goals",
+    "tasks",
+    "productivity",
+    "planning",
+    "dependencies"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onView:goalTreeView"
+  ],
+  "contributes": {
+    "views": {
+      "explorer": [
+        {
+          "id": "goalTreeView",
+          "name": "Goal Tree",
+          "when": "goalTree.enabled"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "goalTree",
+          "title": "Goal Tree",
+          "icon": "$(list-tree)"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "goalTree.openView",
+        "title": "Open Goal Tree",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "goalTree.createGoal",
+        "title": "Create Goal",
+        "icon": "$(add)"
+      },
+      {
+        "command": "goalTree.selectGoal",
+        "title": "Select Goal"
+      },
+      {
+        "command": "goalTree.selectTask",
+        "title": "Select Task"
+      },
+      {
+        "command": "goalTree.editGoal",
+        "title": "Edit Goal",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "goalTree.deleteGoal",
+        "title": "Delete Goal",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "goalTree.refreshTree",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "goalTree.addDependency",
+        "title": "Add Dependency",
+        "icon": "$(link)"
+      },
+      {
+        "command": "goalTree.removeDependency",
+        "title": "Remove Dependency",
+        "icon": "$(unlink)"
+      },
+      {
+        "command": "goalTree.showDependencies",
+        "title": "Show Dependencies",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "goalTree.manageDependencies",
+        "title": "Manage Dependencies",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "goalTree.checkCircularDependencies",
+        "title": "Check Circular Dependencies",
+        "icon": "$(search)"
+      },
+      {
+        "command": "goalTree.addTask",
+        "title": "Add Task",
+        "icon": "$(add)"
+      },
+      {
+        "command": "goalTree.editTask",
+        "title": "Edit Task",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "goalTree.deleteTask",
+        "title": "Delete Task",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "goalTree.toggleTaskStatus",
+        "title": "Toggle Task Status",
+        "icon": "$(check)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "goalTree.createGoal",
+          "when": "view == goalTreeView",
+          "group": "navigation@1"
+        },
+        {
+          "command": "goalTree.refreshTree",
+          "when": "view == goalTreeView",
+          "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "goalTree.editGoal",
+          "when": "view == goalTreeView && viewItem =~ /^goalTree\\.goal/",
+          "group": "1_edit@1"
+        },
+        {
+          "command": "goalTree.addTask",
+          "when": "view == goalTreeView && viewItem =~ /^goalTree\\.goal/",
+          "group": "2_add@1"
+        },
+        {
+          "command": "goalTree.manageDependencies",
+          "when": "view == goalTreeView && viewItem =~ /^goalTree\\.goal/",
+          "group": "3_dependencies@1"
+        },
+        {
+          "command": "goalTree.addDependency",
+          "when": "view == goalTreeView && viewItem =~ /^goalTree\\.goal/",
+          "group": "3_dependencies@2"
+        },
+        {
+          "command": "goalTree.removeDependency",
+          "when": "view == goalTreeView && viewItem =~ /^goalTree\\.goal/ && viewItem =~ /blocked/",
+          "group": "3_dependencies@3"
+        },
+        {
+          "command": "goalTree.showDependencies",
+          "when": "view == goalTreeView && (viewItem =~ /^goalTree\\.goal/ || viewItem == goalTree.dependencyInfo)",
+          "group": "4_view@1"
+        },
+        {
+          "command": "goalTree.deleteGoal",
+          "when": "view == goalTreeView && viewItem =~ /^goalTree\\.goal/",
+          "group": "9_delete@1"
+        },
+        {
+          "command": "goalTree.editTask",
+          "when": "view == goalTreeView && viewItem =~ /^goalTree\\.task/",
+          "group": "1_edit@1"
+        },
+        {
+          "command": "goalTree.toggleTaskStatus",
+          "when": "view == goalTreeView && viewItem =~ /^goalTree\\.task/",
+          "group": "2_status@1"
+        },
+        {
+          "command": "goalTree.deleteTask",
+          "when": "view == goalTreeView && viewItem =~ /^goalTree\\.task/",
+          "group": "9_delete@1"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "goalTree.selectGoal",
+          "when": "false"
+        },
+        {
+          "command": "goalTree.selectTask",
+          "when": "false"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Goal Tree",
+      "properties": {
+        "goalTree.showCompletedGoals": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show completed goals in the tree view"
+        },
+        "goalTree.showTasksInline": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show tasks as children of goals in the tree view"
+        },
+        "goalTree.showDependencyInfo": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show dependency information in the tree view"
+        },
+        "goalTree.autoRefresh": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically refresh the tree view when changes are made"
+        },
+        "goalTree.dependencyVisualization": {
+          "type": "string",
+          "enum": [
+            "icons",
+            "colors",
+            "both"
+          ],
+          "default": "both",
+          "description": "How to visualize dependencies in the tree view"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.74.0",
+    "@types/node": "16.x",
+    "typescript": "^4.9.4"
+  },
+  "dependencies": {}
+}
