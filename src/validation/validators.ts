@@ -115,8 +115,8 @@ class SchemaValidator {
     if (!isValid && validate.errors) {
       validate.errors.forEach(error => {
         errors.push({
-          field: error.instancePath || error.schemaPath || 'root',
-          message: error.message || 'Validation failed',
+          field: error.instancePath ?? error.schemaPath ?? 'root',
+          message: error.message ?? 'Validation failed',
           value: error.data,
           code: error.keyword
         });
@@ -291,11 +291,11 @@ export function sanitizeGoal(goal: unknown): ValidationResult<Goal> {
   const sanitized: Goal = {
     ...result.data,
     title: result.data.title.trim().substring(0, 200),
-    description: result.data.description?.trim().substring(0, 2000) || undefined,
+    description: result.data.description?.trim().substring(0, 2000) ?? undefined,
     tasks: result.data.tasks.map(task => ({
       ...task,
       title: task.title.trim().substring(0, 200),
-      description: task.description?.trim().substring(0, 1000) || undefined
+      description: task.description?.trim().substring(0, 1000) ?? undefined
     }))
   };
 
@@ -533,8 +533,8 @@ export function validateCompleteDataSet(
   }
 
   let goals = structureResult.data;
-  let allErrors = [...structureResult.errors];
-  let allWarnings = [...(structureResult.warnings || [])];
+  const allErrors = [...structureResult.errors];
+  const allWarnings = [...(structureResult.warnings ?? [])];
 
   // Hierarchy validation
   if (checkHierarchy) {
@@ -550,7 +550,7 @@ export function validateCompleteDataSet(
   if (checkConsistency) {
     const consistencyResult = validateDataConsistency(goals);
     allErrors.push(...consistencyResult.errors);
-    allWarnings.push(...(consistencyResult.warnings || []));
+    allWarnings.push(...(consistencyResult.warnings ?? []));
     
     if (consistencyResult.data) {
       goals = consistencyResult.data;

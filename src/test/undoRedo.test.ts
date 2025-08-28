@@ -14,7 +14,7 @@ import * as vscode from 'vscode';
 import { Goal, CreateGoalParams, UpdateGoalParams, GoalStatus, TaskStatus } from '../types';
 import { UndoRedoManager, UndoableCommand } from '../services/UndoRedoManager';
 import { GoalUndoRedoService } from '../services/GoalUndoRedoService';
-import { GoalManager } from '../services/GoalManager';
+import { GoalManager } from '../services/goalManager';
 import { StorageService } from '../services/storageService';
 import { ValidationService } from '../services/ValidationService';
 import {

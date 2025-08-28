@@ -7,15 +7,13 @@
  */
 
 import * as vscode from 'vscode';
-import { Goal, Task, GoalStatus, TaskStatus } from '../types/Goal';
+import { Goal, GoalStatus, TaskStatus } from '../types/Goal';
 import { StateManager } from '../services/stateManager';
 import { GoalManager } from '../services/goalManager';
 import { GoalTreeProvider } from '../providers/goalTreeProvider';
 import { ChangeNotificationService } from '../services/ChangeNotificationService';
 import { createLogger } from '../utils/logger';
-import { TREE_CONTEXT_VALUES } from '../types/TreeTypes';
 import { GoalUndoRedoService } from '../services/GoalUndoRedoService';
-import { UndoRedoManager } from '../services/UndoRedoManager';
 
 /**
  * Tree command handler class - manages all tree-related commands
@@ -593,13 +591,13 @@ export class TreeCommands {
 
             const newDescription = await vscode.window.showInputBox({
                 prompt: 'Edit task description (optional)',
-                value: task.description || '',
+                value: task.description ?? '',
                 placeHolder: 'Task description...'
             });
 
             await this.goalManager.updateTask(goalId, taskId, {
                 title: newTitle.trim(),
-                description: newDescription?.trim() || undefined
+                description: newDescription?.trim() ?? undefined
             });
 
             this.treeProvider.refresh();
@@ -771,13 +769,13 @@ export class TreeCommands {
 
             const newDescription = await vscode.window.showInputBox({
                 prompt: 'Edit goal description (optional)',
-                value: goal.description || '',
+                value: goal.description ?? '',
                 placeHolder: 'Goal description...'
             });
 
             await this.goalManager.updateGoal(goalId, {
                 title: newTitle.trim(),
-                description: newDescription?.trim() || undefined
+                description: newDescription?.trim() ?? undefined
             });
 
             this.treeProvider.refresh();
@@ -1020,7 +1018,7 @@ export class TreeCommands {
         const goalItems = goals.map(goal => ({
             label: goal.title,
             description: goal.status,
-            detail: goal.description || undefined,
+            detail: goal.description ?? undefined,
             goalId: goal.id
         }));
 
@@ -1106,7 +1104,7 @@ export class TreeCommands {
             const goalItems = availableGoals.map(g => ({
                 label: g.title,
                 description: g.status,
-                detail: g.description || undefined,
+                detail: g.description ?? undefined,
                 goalId: g.id
             }));
 
@@ -1114,7 +1112,7 @@ export class TreeCommands {
                 placeHolder: 'Select goal to add as dependency'
             });
 
-            if (!selectedItem || !selectedItem.goalId) {
+            if (!selectedItem?.goalId) {
                 vscode.window.showErrorMessage('Invalid dependency selection');
                 return;
             }
@@ -1159,8 +1157,8 @@ export class TreeCommands {
             const dependencyItems = goal.blockedByIds.map(depId => {
                 const depGoal = this.stateManager.getGoal(depId);
                 return {
-                    label: depGoal?.title || depId,
-                    description: depGoal?.status || 'Unknown',
+                    label: depGoal?.title ?? depId,
+                    description: depGoal?.status ?? 'Unknown',
                     dependencyId: depId
                 };
             });
@@ -1169,7 +1167,7 @@ export class TreeCommands {
                 placeHolder: 'Select dependency to remove'
             });
 
-            if (!selectedItem || !selectedItem.dependencyId) {
+            if (!selectedItem?.dependencyId) {
                 vscode.window.showErrorMessage('Invalid dependency selection');
                 return;
             }
@@ -1468,7 +1466,7 @@ export class TreeCommands {
      */
     private isDescendant(ancestorId: string, descendantId: string): boolean {
         const descendant = this.stateManager.getGoal(descendantId);
-        if (!descendant || !descendant.parentId) {
+        if (!descendant?.parentId) {
             return false;
         }
         

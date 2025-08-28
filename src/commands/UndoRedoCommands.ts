@@ -1203,22 +1203,3 @@ export class CommandFactory {
     }
 }
 
-/**
- * Export all command classes for direct use
- */
-export {
-    BaseGoalCommand,
-    CreateGoalCommand,
-    UpdateGoalCommand,
-    DeleteGoalCommand,
-    ChangeGoalStatusCommand,
-    MoveGoalCommand,
-    AddTaskCommand,
-    UpdateTaskCommand,
-    DeleteTaskCommand,
-    ChangeTaskStatusCommand,
-    AddDependencyCommand,
-    RemoveDependencyCommand,
-    BulkStatusChangeCommand,
-    BulkDeleteCommand
-};
