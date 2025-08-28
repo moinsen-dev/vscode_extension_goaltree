@@ -5,7 +5,7 @@ github_number: 1
 github: https://github.com/moinsen-dev/vscode_extension_goaltree/issues/1
 status: open
 created: 2025-08-26T08:17:34Z
-updated: 2025-08-26T08:17:34Z
+updated: 2025-08-28T12:17:55Z
 last_sync: 2025-08-27T09:38:00Z
 assignees: []
 labels: []
