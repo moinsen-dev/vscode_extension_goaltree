@@ -1,0 +1,9 @@
+Task Status Icons Placeholder
+
+This directory is intended for custom SVG icons representing different task statuses:
+
+- todo.svg - Icon for tasks that need to be completed
+- in-progress.svg - Icon for tasks currently being worked on
+- done.svg - Icon for completed tasks
+
+The TreeIcons.ts system provides these icons through VS Code's ThemeIcon system for consistency with the VS Code UI.

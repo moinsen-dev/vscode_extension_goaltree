@@ -1,0 +1,12 @@
+Goal Status Icons Placeholder
+
+This directory is intended for custom SVG icons representing different goal statuses:
+
+- planned.svg - Icon for goals that are planned but not started
+- in-progress.svg - Icon for goals currently being worked on  
+- blocked.svg - Icon for goals blocked by dependencies
+- completed.svg - Icon for successfully completed goals
+
+Since this is a VS Code extension implementation focused on the visual system architecture, actual SVG files are not created in this implementation. The TreeIcons.ts system uses VS Code's built-in ThemeIcon system which provides consistent, theme-aware icons.
+
+Custom SVG icons can be added here in the future for specialized visual requirements.

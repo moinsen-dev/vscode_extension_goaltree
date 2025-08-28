@@ -16,15 +16,6 @@ export interface GoalTreeItem extends TreeItem {
   description?: string;
 }
 
-/**
- * Tree node types
- */
-export type TreeNodeType = 
-  | 'goal' 
-  | 'task' 
-  | 'milestone' 
-  | 'folder' 
-  | 'root';
 
 /**
  * Tree node icon configuration

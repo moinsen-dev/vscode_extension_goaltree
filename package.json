@@ -1,27 +1,208 @@
 {
-  "name": "goaltree",
+  "name": "goal-tree",
   "displayName": "Goal Tree",
-  "description": "Hierarchical goal tracking and dependency management for VS Code",
+  "description": "Visual goal management and tree visualization for VS Code",
   "version": "0.1.0",
+  "publisher": "moinsen-dev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/moinsen-dev/vscode_extension_goaltree"
+  },
   "engines": {
     "vscode": "^1.74.0"
   },
   "categories": [
-    "Other",
-    "Notebooks"
+    "Visualization",
+    "Other"
   ],
   "keywords": [
     "goals",
-    "tasks",
-    "productivity",
     "planning",
-    "dependencies"
+    "tree",
+    "visualization",
+    "productivity"
   ],
-  "main": "./out/extension.js",
   "activationEvents": [
+    "onCommand:goalTree.openView",
     "onView:goalTreeView"
   ],
+  "main": "./out/extension.js",
   "contributes": {
+    "commands": [
+      {
+        "command": "goalTree.openView",
+        "title": "Open Goal Tree",
+        "category": "Goal Tree"
+      },
+      {
+        "command": "goalTree.createGoal",
+        "title": "Create New Goal",
+        "category": "Goal Tree",
+        "icon": "$(plus)"
+      },
+      {
+        "command": "goalTree.createSubGoal",
+        "title": "Add Sub-goal",
+        "category": "Goal Tree",
+        "icon": "$(plus)"
+      },
+      {
+        "command": "goalTree.addTask",
+        "title": "Add Task",
+        "category": "Goal Tree",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "goalTree.editGoal",
+        "title": "Edit Goal",
+        "category": "Goal Tree",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "goalTree.editTask",
+        "title": "Edit Task",
+        "category": "Goal Tree",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "goalTree.deleteGoal",
+        "title": "Delete Goal",
+        "category": "Goal Tree",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "goalTree.deleteTask",
+        "title": "Delete Task",
+        "category": "Goal Tree",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "goalTree.duplicateGoal",
+        "title": "Duplicate Goal",
+        "category": "Goal Tree",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "goalTree.markInProgress",
+        "title": "Mark as In Progress",
+        "category": "Goal Tree",
+        "icon": "$(play)"
+      },
+      {
+        "command": "goalTree.markCompleted",
+        "title": "Mark as Completed",
+        "category": "Goal Tree",
+        "icon": "$(check)"
+      },
+      {
+        "command": "goalTree.markBlocked",
+        "title": "Mark as Blocked",
+        "category": "Goal Tree",
+        "icon": "$(stop)"
+      },
+      {
+        "command": "goalTree.markPlanned",
+        "title": "Mark as Planned",
+        "category": "Goal Tree",
+        "icon": "$(circle-outline)"
+      },
+      {
+        "command": "goalTree.toggleTask",
+        "title": "Toggle Task Status",
+        "category": "Goal Tree",
+        "icon": "$(check)"
+      },
+      {
+        "command": "goalTree.moveTaskUp",
+        "title": "Move Task Up",
+        "category": "Goal Tree",
+        "icon": "$(arrow-up)"
+      },
+      {
+        "command": "goalTree.moveTaskDown",
+        "title": "Move Task Down",
+        "category": "Goal Tree",
+        "icon": "$(arrow-down)"
+      },
+      {
+        "command": "goalTree.addDependency",
+        "title": "Add Dependency",
+        "category": "Goal Tree",
+        "icon": "$(link)"
+      },
+      {
+        "command": "goalTree.removeDependency",
+        "title": "Remove Dependency",
+        "category": "Goal Tree",
+        "icon": "$(unlink)"
+      },
+      {
+        "command": "goalTree.showDependencies",
+        "title": "Show Dependencies",
+        "category": "Goal Tree",
+        "icon": "$(info)"
+      },
+      {
+        "command": "goalTree.refreshView",
+        "title": "Refresh",
+        "category": "Goal Tree",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "goalTree.expandAll",
+        "title": "Expand All",
+        "category": "Goal Tree",
+        "icon": "$(expand-all)"
+      },
+      {
+        "command": "goalTree.collapseAll",
+        "title": "Collapse All",
+        "category": "Goal Tree",
+        "icon": "$(collapse-all)"
+      },
+      {
+        "command": "goalTree.toggleShowCompleted",
+        "title": "Toggle Show Completed",
+        "category": "Goal Tree",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "goalTree.toggleSortByTitle",
+        "title": "Toggle Sort by Title",
+        "category": "Goal Tree",
+        "icon": "$(sort-precedence)"
+      },
+      {
+        "command": "goalTree.toggleGroupByStatus",
+        "title": "Toggle Group by Status",
+        "category": "Goal Tree",
+        "icon": "$(group-by-ref-type)"
+      },
+      {
+        "command": "goalTree.searchGoals",
+        "title": "Search Goals",
+        "category": "Goal Tree",
+        "icon": "$(search)"
+      },
+      {
+        "command": "goalTree.filterByStatus",
+        "title": "Filter by Status",
+        "category": "Goal Tree",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "goalTree.showOnlyBlocked",
+        "title": "Show Only Blocked Goals",
+        "category": "Goal Tree",
+        "icon": "$(stop)"
+      },
+      {
+        "command": "goalTree.showOnlyHighPriority",
+        "title": "Show Only High Priority Goals",
+        "category": "Goal Tree",
+        "icon": "$(flame)"
+      }
+    ],
     "views": {
       "explorer": [
         {
@@ -34,213 +215,366 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "goalTree",
+          "id": "goalTreeContainer",
           "title": "Goal Tree",
-          "icon": "$(list-tree)"
+          "icon": "$(symbol-hierarchy)"
         }
       ]
     },
-    "commands": [
-      {
-        "command": "goalTree.openView",
-        "title": "Open Goal Tree",
-        "icon": "$(list-tree)"
-      },
-      {
-        "command": "goalTree.createGoal",
-        "title": "Create Goal",
-        "icon": "$(add)"
-      },
-      {
-        "command": "goalTree.selectGoal",
-        "title": "Select Goal"
-      },
-      {
-        "command": "goalTree.selectTask",
-        "title": "Select Task"
-      },
-      {
-        "command": "goalTree.editGoal",
-        "title": "Edit Goal",
-        "icon": "$(edit)"
-      },
-      {
-        "command": "goalTree.deleteGoal",
-        "title": "Delete Goal",
-        "icon": "$(trash)"
-      },
-      {
-        "command": "goalTree.refreshTree",
-        "title": "Refresh",
-        "icon": "$(refresh)"
-      },
-      {
-        "command": "goalTree.addDependency",
-        "title": "Add Dependency",
-        "icon": "$(link)"
-      },
-      {
-        "command": "goalTree.removeDependency",
-        "title": "Remove Dependency",
-        "icon": "$(unlink)"
-      },
-      {
-        "command": "goalTree.showDependencies",
-        "title": "Show Dependencies",
-        "icon": "$(list-tree)"
-      },
-      {
-        "command": "goalTree.manageDependencies",
-        "title": "Manage Dependencies",
-        "icon": "$(settings-gear)"
-      },
-      {
-        "command": "goalTree.checkCircularDependencies",
-        "title": "Check Circular Dependencies",
-        "icon": "$(search)"
-      },
-      {
-        "command": "goalTree.addTask",
-        "title": "Add Task",
-        "icon": "$(add)"
-      },
-      {
-        "command": "goalTree.editTask",
-        "title": "Edit Task",
-        "icon": "$(edit)"
-      },
-      {
-        "command": "goalTree.deleteTask",
-        "title": "Delete Task",
-        "icon": "$(trash)"
-      },
-      {
-        "command": "goalTree.toggleTaskStatus",
-        "title": "Toggle Task Status",
-        "icon": "$(check)"
-      }
-    ],
     "menus": {
       "view/title": [
         {
           "command": "goalTree.createGoal",
           "when": "view == goalTreeView",
-          "group": "navigation@1"
+          "group": "navigation"
         },
         {
-          "command": "goalTree.refreshTree",
+          "command": "goalTree.refreshView",
           "when": "view == goalTreeView",
-          "group": "navigation@2"
+          "group": "navigation"
+        },
+        {
+          "command": "goalTree.expandAll",
+          "when": "view == goalTreeView",
+          "group": "navigation"
+        },
+        {
+          "command": "goalTree.collapseAll",
+          "when": "view == goalTreeView",
+          "group": "navigation"
+        },
+        {
+          "command": "goalTree.searchGoals",
+          "when": "view == goalTreeView",
+          "group": "navigation"
+        },
+        {
+          "command": "goalTree.toggleShowCompleted",
+          "when": "view == goalTreeView",
+          "group": "1_settings"
+        },
+        {
+          "command": "goalTree.toggleSortByTitle",
+          "when": "view == goalTreeView",
+          "group": "1_settings"
+        },
+        {
+          "command": "goalTree.filterByStatus",
+          "when": "view == goalTreeView",
+          "group": "2_filter"
         }
       ],
       "view/item/context": [
         {
-          "command": "goalTree.editGoal",
-          "when": "view == goalTreeView && viewItem =~ /^goalTree\\.goal/",
-          "group": "1_edit@1"
+          "command": "goalTree.createSubGoal",
+          "when": "view == goalTreeView && viewItem =~ /^goal/",
+          "group": "1_create"
         },
         {
           "command": "goalTree.addTask",
-          "when": "view == goalTreeView && viewItem =~ /^goalTree\\.goal/",
-          "group": "2_add@1"
+          "when": "view == goalTreeView && viewItem =~ /^goal/",
+          "group": "1_create"
         },
         {
-          "command": "goalTree.manageDependencies",
-          "when": "view == goalTreeView && viewItem =~ /^goalTree\\.goal/",
-          "group": "3_dependencies@1"
-        },
-        {
-          "command": "goalTree.addDependency",
-          "when": "view == goalTreeView && viewItem =~ /^goalTree\\.goal/",
-          "group": "3_dependencies@2"
-        },
-        {
-          "command": "goalTree.removeDependency",
-          "when": "view == goalTreeView && viewItem =~ /^goalTree\\.goal/ && viewItem =~ /blocked/",
-          "group": "3_dependencies@3"
-        },
-        {
-          "command": "goalTree.showDependencies",
-          "when": "view == goalTreeView && (viewItem =~ /^goalTree\\.goal/ || viewItem == goalTree.dependencyInfo)",
-          "group": "4_view@1"
-        },
-        {
-          "command": "goalTree.deleteGoal",
-          "when": "view == goalTreeView && viewItem =~ /^goalTree\\.goal/",
-          "group": "9_delete@1"
+          "command": "goalTree.editGoal",
+          "when": "view == goalTreeView && viewItem =~ /^goal/",
+          "group": "2_edit"
         },
         {
           "command": "goalTree.editTask",
-          "when": "view == goalTreeView && viewItem =~ /^goalTree\\.task/",
-          "group": "1_edit@1"
+          "when": "view == goalTreeView && viewItem =~ /^task/",
+          "group": "2_edit"
         },
         {
-          "command": "goalTree.toggleTaskStatus",
-          "when": "view == goalTreeView && viewItem =~ /^goalTree\\.task/",
-          "group": "2_status@1"
+          "command": "goalTree.duplicateGoal",
+          "when": "view == goalTreeView && viewItem =~ /^goal/",
+          "group": "2_edit"
+        },
+        {
+          "command": "goalTree.markPlanned",
+          "when": "view == goalTreeView && viewItem =~ /^goal/ && viewItem != goal_status-planned",
+          "group": "3_status"
+        },
+        {
+          "command": "goalTree.markInProgress",
+          "when": "view == goalTreeView && viewItem =~ /^goal/ && viewItem != goal_status-in-progress",
+          "group": "3_status"
+        },
+        {
+          "command": "goalTree.markCompleted",
+          "when": "view == goalTreeView && viewItem =~ /^goal/ && viewItem != goal_status-completed",
+          "group": "3_status"
+        },
+        {
+          "command": "goalTree.markBlocked",
+          "when": "view == goalTreeView && viewItem =~ /^goal/ && viewItem != goal_status-blocked",
+          "group": "3_status"
+        },
+        {
+          "command": "goalTree.toggleTask",
+          "when": "view == goalTreeView && viewItem =~ /^task/",
+          "group": "3_status"
+        },
+        {
+          "command": "goalTree.moveTaskUp",
+          "when": "view == goalTreeView && viewItem =~ /^task/",
+          "group": "4_move"
+        },
+        {
+          "command": "goalTree.moveTaskDown",
+          "when": "view == goalTreeView && viewItem =~ /^task/",
+          "group": "4_move"
+        },
+        {
+          "command": "goalTree.addDependency",
+          "when": "view == goalTreeView && viewItem =~ /^goal/",
+          "group": "5_depend"
+        },
+        {
+          "command": "goalTree.removeDependency",
+          "when": "view == goalTreeView && viewItem =~ /^goal/",
+          "group": "5_depend"
+        },
+        {
+          "command": "goalTree.showDependencies",
+          "when": "view == goalTreeView && viewItem =~ /^goal/",
+          "group": "5_depend"
+        },
+        {
+          "command": "goalTree.deleteGoal",
+          "when": "view == goalTreeView && viewItem =~ /^goal/",
+          "group": "9_delete"
         },
         {
           "command": "goalTree.deleteTask",
-          "when": "view == goalTreeView && viewItem =~ /^goalTree\\.task/",
-          "group": "9_delete@1"
-        }
-      ],
-      "commandPalette": [
-        {
-          "command": "goalTree.selectGoal",
-          "when": "false"
-        },
-        {
-          "command": "goalTree.selectTask",
-          "when": "false"
+          "when": "view == goalTreeView && viewItem =~ /^task/",
+          "group": "9_delete"
         }
       ]
     },
+    "keybindings": [
+      {
+        "command": "goalTree.createGoal",
+        "key": "ctrl+shift+g ctrl+n",
+        "mac": "cmd+shift+g cmd+n",
+        "when": "goalTree.enabled"
+      },
+      {
+        "command": "goalTree.createSubGoal",
+        "key": "ctrl+shift+g ctrl+s",
+        "mac": "cmd+shift+g cmd+s",
+        "when": "goalTree.enabled && view == goalTreeView"
+      },
+      {
+        "command": "goalTree.addTask",
+        "key": "ctrl+shift+g ctrl+t",
+        "mac": "cmd+shift+g cmd+t",
+        "when": "goalTree.enabled && view == goalTreeView"
+      },
+      {
+        "command": "goalTree.toggleTask",
+        "key": "space",
+        "when": "goalTree.enabled && view == goalTreeView && viewItem =~ /^task/"
+      },
+      {
+        "command": "goalTree.refreshView",
+        "key": "ctrl+shift+g r",
+        "mac": "cmd+shift+g r",
+        "when": "goalTree.enabled"
+      },
+      {
+        "command": "goalTree.openView",
+        "key": "ctrl+shift+g ctrl+o",
+        "mac": "cmd+shift+g cmd+o"
+      },
+      {
+        "command": "goalTree.searchGoals",
+        "key": "ctrl+shift+g ctrl+f",
+        "mac": "cmd+shift+g cmd+f",
+        "when": "goalTree.enabled"
+      },
+      {
+        "command": "goalTree.markInProgress",
+        "key": "ctrl+shift+g p",
+        "mac": "cmd+shift+g p",
+        "when": "goalTree.enabled && view == goalTreeView && viewItem =~ /^goal/"
+      },
+      {
+        "command": "goalTree.markCompleted",
+        "key": "ctrl+shift+g c",
+        "mac": "cmd+shift+g c",
+        "when": "goalTree.enabled && view == goalTreeView && viewItem =~ /^goal/"
+      },
+      {
+        "command": "goalTree.markBlocked",
+        "key": "ctrl+shift+g b",
+        "mac": "cmd+shift+g b",
+        "when": "goalTree.enabled && view == goalTreeView && viewItem =~ /^goal/"
+      },
+      {
+        "command": "goalTree.expandAll",
+        "key": "ctrl+shift+g e",
+        "mac": "cmd+shift+g e",
+        "when": "goalTree.enabled && view == goalTreeView"
+      },
+      {
+        "command": "goalTree.collapseAll",
+        "key": "ctrl+shift+g ctrl+e",
+        "mac": "cmd+shift+g cmd+e",
+        "when": "goalTree.enabled && view == goalTreeView"
+      },
+      {
+        "command": "goalTree.editGoal",
+        "key": "F2",
+        "when": "goalTree.enabled && view == goalTreeView && viewItem =~ /^goal/"
+      },
+      {
+        "command": "goalTree.editTask",
+        "key": "F2",
+        "when": "goalTree.enabled && view == goalTreeView && viewItem =~ /^task/"
+      },
+      {
+        "command": "goalTree.deleteGoal",
+        "key": "Delete",
+        "when": "goalTree.enabled && view == goalTreeView && viewItem =~ /^goal/"
+      },
+      {
+        "command": "goalTree.deleteTask",
+        "key": "Delete",
+        "when": "goalTree.enabled && view == goalTreeView && viewItem =~ /^task/"
+      },
+      {
+        "command": "goalTree.duplicateGoal",
+        "key": "ctrl+d",
+        "mac": "cmd+d",
+        "when": "goalTree.enabled && view == goalTreeView && viewItem =~ /^goal/"
+      },
+      {
+        "command": "goalTree.moveTaskUp",
+        "key": "ctrl+up",
+        "mac": "cmd+up",
+        "when": "goalTree.enabled && view == goalTreeView && viewItem =~ /^task/"
+      },
+      {
+        "command": "goalTree.moveTaskDown",
+        "key": "ctrl+down",
+        "mac": "cmd+down",
+        "when": "goalTree.enabled && view == goalTreeView && viewItem =~ /^task/"
+      },
+      {
+        "command": "goalTree.addDependency",
+        "key": "ctrl+shift+g d",
+        "mac": "cmd+shift+g d",
+        "when": "goalTree.enabled && view == goalTreeView && viewItem =~ /^goal/"
+      },
+      {
+        "command": "goalTree.showDependencies",
+        "key": "ctrl+shift+g ctrl+d",
+        "mac": "cmd+shift+g cmd+d",
+        "when": "goalTree.enabled && view == goalTreeView && viewItem =~ /^goal/"
+      },
+      {
+        "command": "goalTree.toggleShowCompleted",
+        "key": "ctrl+shift+g h",
+        "mac": "cmd+shift+g h",
+        "when": "goalTree.enabled && view == goalTreeView"
+      },
+      {
+        "command": "goalTree.toggleSortByTitle",
+        "key": "ctrl+shift+g s",
+        "mac": "cmd+shift+g s",
+        "when": "goalTree.enabled && view == goalTreeView"
+      }
+    ],
     "configuration": {
       "title": "Goal Tree",
       "properties": {
-        "goalTree.showCompletedGoals": {
+        "goalTree.autoRefresh": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically refresh the goal tree view when files change"
+        },
+        "goalTree.showCompleted": {
           "type": "boolean",
           "default": true,
           "description": "Show completed goals in the tree view"
         },
-        "goalTree.showTasksInline": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show tasks as children of goals in the tree view"
-        },
-        "goalTree.showDependencyInfo": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show dependency information in the tree view"
-        },
-        "goalTree.autoRefresh": {
-          "type": "boolean",
-          "default": true,
-          "description": "Automatically refresh the tree view when changes are made"
-        },
-        "goalTree.dependencyVisualization": {
+        "goalTree.defaultGoalType": {
           "type": "string",
+          "default": "task",
           "enum": [
-            "icons",
-            "colors",
-            "both"
+            "task",
+            "milestone",
+            "objective"
           ],
-          "default": "both",
-          "description": "How to visualize dependencies in the tree view"
+          "description": "Default type when creating new goals"
+        },
+        "goalTree.sortByTitle": {
+          "type": "boolean",
+          "default": false,
+          "description": "Sort goals alphabetically by title instead of by creation date"
+        },
+        "goalTree.groupByStatus": {
+          "type": "boolean",
+          "default": false,
+          "description": "Group goals by their status in the tree view"
+        },
+        "goalTree.persistViewState": {
+          "type": "boolean",
+          "default": true,
+          "description": "Remember expanded/collapsed state of tree items between sessions"
+        },
+        "goalTree.showTaskCounts": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show task counts in goal labels"
+        },
+        "goalTree.maxDepth": {
+          "type": "number",
+          "default": 10,
+          "minimum": 1,
+          "maximum": 20,
+          "description": "Maximum depth of goal hierarchy to display"
         }
       }
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
+    "vscode:prepublish": "npm run build:prod",
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "watch": "tsc -watch -p ./",
+    "build": "node esbuild.config.js",
+    "build:prod": "node esbuild.config.js --production",
+    "build:watch": "node esbuild.config.js --watch",
+    "bundle": "npm run build:prod",
+    "bundle:analyze": "npm run build:prod && echo 'Bundle analysis complete!'",
+    "pretest": "npm run build && npm run lint",
+    "lint": "eslint src --ext ts",
+    "lint:fix": "eslint src --ext ts --fix",
+    "format": "prettier --write src/**/*.ts",
+    "format:check": "prettier --check src/**/*.ts",
+    "test": "node ./out/test/runTest.js",
+    "package": "npm run build:prod && vsce package",
+    "package:dev": "npm run build && vsce package",
+    "clean": "rimraf out dist *.vsix",
+    "dev": "npm run build:watch"
   },
   "devDependencies": {
-    "@types/vscode": "^1.74.0",
+    "@types/ajv": "^0.0.5",
     "@types/node": "16.x",
-    "typescript": "^4.9.4"
+    "@types/vscode": "^1.74.0",
+    "@typescript-eslint/eslint-plugin": "^5.45.0",
+    "@typescript-eslint/parser": "^5.45.0",
+    "@vscode/test-electron": "^2.2.0",
+    "esbuild": "^0.25.9",
+    "eslint": "^8.28.0",
+    "prettier": "^3.6.2",
+    "rimraf": "^6.0.1",
+    "typescript": "^4.9.4",
+    "vsce": "^2.15.0"
   },
-  "dependencies": {}
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1"
+  }
 }

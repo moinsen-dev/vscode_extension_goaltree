@@ -1,296 +1,233 @@
-/**
- * Goal Tree Extension - Main extension entry point
- * 
- * This file handles extension activation, registration of providers and commands,
- * and initialization of the goal management system with visual dependency indicators.
- */
-
-import {
-    ExtensionContext,
-    window,
-    workspace,
-    ConfigurationChangeEvent,
-    commands
-} from 'vscode';
-
-import { GoalManager } from './services/GoalManager';
+import * as vscode from 'vscode';
+import { GoalManager, StateManager, StorageService, DependencyService, ChangeNotificationService } from './services';
 import { ValidationService } from './services/ValidationService';
-import { GoalTreeProvider } from './providers/goalTreeProvider';
+import { GoalTreeProvider, TreeContextMenuProvider } from './providers';
 import { TreeCommands } from './commands/TreeCommands';
-import {
-    GoalTreeExtension,
-    ExtensionState,
-    ExtensionCommand,
-    CommandHandler,
-    ExtensionContributions
-} from './types/extension';
+import { CONFIG_KEYS, STORAGE_KEYS } from './constants';
+
+// Core service instances
+let goalManager: GoalManager;
+let stateManager: StateManager;
+let storageService: StorageService;
+let dependencyService: DependencyService;
+let validationService: ValidationService;
+let changeNotificationService: ChangeNotificationService;
+let goalTreeProvider: GoalTreeProvider;
+let treeContextMenuProvider: TreeContextMenuProvider;
+let treeCommands: TreeCommands;
+let extensionContext: vscode.ExtensionContext;
+let treeView: vscode.TreeView<string>;
 
 /**
- * Extension state management
+ * Extension activation function - called when the extension is activated
  */
-class ExtensionStateManager {
-    private static instance: ExtensionStateManager;
-    private state: ExtensionState;
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
+	console.log('Goal Tree extension is now active!');
 
-    private constructor() {
-        this.state = {
-            isActivated: false,
-            version: '0.1.0'
-        };
-    }
+	// Store context for later use
+	extensionContext = context;
 
-    public static getInstance(): ExtensionStateManager {
-        if (!ExtensionStateManager.instance) {
-            ExtensionStateManager.instance = new ExtensionStateManager();
-        }
-        return ExtensionStateManager.instance;
-    }
+	// Initialize core services
+	storageService = new StorageService(context);
+	stateManager = new StateManager();
+	dependencyService = new DependencyService(stateManager);
+	validationService = new ValidationService();
+	goalManager = new GoalManager(validationService);
+	changeNotificationService = ChangeNotificationService.getInstance();
 
-    public getState(): ExtensionState {
-        return { ...this.state };
-    }
+	// Initialize tree components
+	goalTreeProvider = new GoalTreeProvider(stateManager, goalManager, context);
+	treeContextMenuProvider = new TreeContextMenuProvider(stateManager, goalManager);
+	treeCommands = new TreeCommands(stateManager, goalManager, goalTreeProvider, changeNotificationService);
 
-    public updateState(updates: Partial<ExtensionState>): void {
-        this.state = { ...this.state, ...updates };
-    }
+	// Register tree data provider and create tree view
+	treeView = vscode.window.createTreeView('goalTreeView', {
+		treeDataProvider: goalTreeProvider,
+		showCollapseAll: true,
+		canSelectMany: false
+	});
 
-    public isActivated(): boolean {
-        return this.state.isActivated;
-    }
+	// Register tree commands
+	treeCommands.registerCommands(context);
+
+	// Initialize context menu provider
+	treeContextMenuProvider.initialize();
+
+	// Register tree view event handlers
+	context.subscriptions.push(
+		treeView,
+		treeView.onDidExpandElement(e => {
+			goalTreeProvider.onTreeItemExpanded(e.element, context);
+		}),
+		treeView.onDidCollapseElement(e => {
+			goalTreeProvider.onTreeItemCollapsed(e.element, context);
+		}),
+		treeView.onDidChangeSelection(e => {
+			// Handle selection changes if needed
+			console.log('Tree selection changed:', e.selection);
+		}),
+		treeView.onDidChangeVisibility(e => {
+			// Handle visibility changes if needed
+			console.log('Tree visibility changed:', e.visible);
+		})
+	);
+
+	// Set the context to enable the view
+	vscode.commands.executeCommand('setContext', 'goalTree.enabled', true);
+
+	// Set up event listeners for real-time updates
+	const eventListeners = [
+		changeNotificationService.onEvent('goal:created', () => {
+			goalTreeProvider.refresh();
+		}),
+
+		changeNotificationService.onEvent('goal:updated', () => {
+			goalTreeProvider.refresh();
+		}),
+
+		changeNotificationService.onEvent('goal:deleted', () => {
+			goalTreeProvider.refresh();
+		}),
+
+		changeNotificationService.onEvent('goal:status-changed', () => {
+			goalTreeProvider.refresh();
+		}),
+
+		changeNotificationService.onEvent('task:created', () => {
+			goalTreeProvider.refresh();
+		}),
+
+		changeNotificationService.onEvent('task:updated', () => {
+			goalTreeProvider.refresh();
+		}),
+
+		changeNotificationService.onEvent('task:deleted', () => {
+			goalTreeProvider.refresh();
+		}),
+
+		changeNotificationService.onEvent('task:status-changed', () => {
+			goalTreeProvider.refresh();
+		})
+	];
+
+	// Register all event listeners for proper cleanup
+	eventListeners.forEach(listener => context.subscriptions.push(listener));
+
+	// Initialize configuration on startup
+	initializeConfiguration(context);
+
+	// Listen for configuration changes
+	const configWatcher = vscode.workspace.onDidChangeConfiguration(event => {
+		if (event.affectsConfiguration('goalTree')) {
+			handleConfigurationChange(event, context);
+		}
+	});
+
+	context.subscriptions.push(configWatcher);
+
+	// Load view state from previous session
+	await goalTreeProvider.loadViewState(context);
+
+	// Services are initialized and ready to use
+
+	console.log('Goal Tree extension activated successfully');
 }
 
 /**
- * Main extension implementation
+ * Extension deactivation function - called when the extension is deactivated
  */
-class GoalTreeExtensionImpl implements GoalTreeExtension {
-    public context: ExtensionContext;
-    private goalManager: GoalManager;
-    private validationService: ValidationService;
-    private treeProvider: GoalTreeProvider;
-    private treeCommands: TreeCommands;
-    private stateManager: ExtensionStateManager;
-    private contributions: ExtensionContributions;
+export function deactivate(): void {
+	console.log('Goal Tree extension is being deactivated');
+	
+	// Save view state and dispose resources
+	if (extensionContext) {
+		if (goalTreeProvider) {
+			goalTreeProvider.dispose(extensionContext);
+		}
+		if (treeContextMenuProvider) {
+			treeContextMenuProvider.dispose();
+		}
+	}
+	
+	// Clean up resources - TODO: Implement cleanup when needed
 
-    constructor(context: ExtensionContext) {
-        this.context = context;
-        this.stateManager = ExtensionStateManager.getInstance();
-        this.contributions = {
-            commands: new Map<ExtensionCommand, CommandHandler>(),
-            providers: [],
-            disposables: []
-        };
-
-        // Initialize services
-        this.validationService = new ValidationService();
-        this.goalManager = new GoalManager(
-            this.validationService,
-            (message: string) => this.log(message)
-        );
-
-        // Initialize providers
-        this.treeProvider = new GoalTreeProvider(this.goalManager);
-        this.contributions.providers.push(this.treeProvider);
-
-        // Initialize commands
-        this.treeCommands = TreeCommands.registerCommands(this.goalManager, this.treeProvider);
-    }
-
-    public async activate(): Promise<void> {
-        try {
-            this.log('Activating Goal Tree extension...');
-
-            // Update state
-            this.stateManager.updateState({
-                isActivated: true,
-                activationTime: new Date(),
-                context: this.context
-            });
-
-            // Register tree data provider
-            const treeView = window.createTreeView('goalTreeView', {
-                treeDataProvider: this.treeProvider,
-                canSelectMany: false
-            });
-            this.contributions.disposables.push(treeView);
-
-            // Configure tree provider based on settings
-            this.configureTreeProvider();
-
-            // Register configuration change listener
-            const configListener = workspace.onDidChangeConfiguration((e: ConfigurationChangeEvent) => {
-                if (e.affectsConfiguration('goalTree')) {
-                    this.configureTreeProvider();
-                }
-            });
-            this.contributions.disposables.push(configListener);
-
-            // Enable goal tree context
-            await commands.executeCommand('setContext', 'goalTree.enabled', true);
-
-            this.log('Goal Tree extension activated successfully');
-            
-            // Show welcome message for first-time users
-            const isFirstTime = this.context.globalState.get('goalTree.firstTime', true);
-            if (isFirstTime) {
-                await this.showWelcomeMessage();
-                await this.context.globalState.update('goalTree.firstTime', false);
-            }
-
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-            this.logError('Failed to activate extension', error);
-            window.showErrorMessage(`Goal Tree extension failed to activate: ${errorMessage}`);
-            throw error;
-        }
-    }
-
-    public async deactivate(): Promise<void> {
-        try {
-            this.log('Deactivating Goal Tree extension...');
-
-            // Dispose of all resources
-            for (const disposable of this.contributions.disposables) {
-                if (disposable && typeof disposable.dispose === 'function') {
-                    disposable.dispose();
-                }
-            }
-
-            // Dispose of providers
-            for (const provider of this.contributions.providers) {
-                if (provider && typeof (provider as any).dispose === 'function') {
-                    (provider as any).dispose();
-                }
-            }
-
-            // Dispose of goal manager
-            this.goalManager.dispose();
-
-            // Update state
-            this.stateManager.updateState({
-                isActivated: false,
-                context: undefined
-            });
-
-            // Disable goal tree context
-            await commands.executeCommand('setContext', 'goalTree.enabled', false);
-
-            this.log('Goal Tree extension deactivated successfully');
-
-        } catch (error) {
-            this.logError('Error during deactivation', error);
-        }
-    }
-
-    // ===========================================
-    // Private Helper Methods
-    // ===========================================
-
-    private configureTreeProvider(): void {
-        try {
-            const config = workspace.getConfiguration('goalTree');
-            
-            // Apply configuration settings
-            const showCompletedGoals = config.get<boolean>('showCompletedGoals', true);
-            const showTasksInline = config.get<boolean>('showTasksInline', true);
-            const showDependencyInfo = config.get<boolean>('showDependencyInfo', true);
-
-            this.treeProvider.setShowCompletedGoals(showCompletedGoals);
-            this.treeProvider.setShowTasksInline(showTasksInline);
-            this.treeProvider.setShowDependencyInfo(showDependencyInfo);
-
-            this.log(`Tree provider configured: completed=${showCompletedGoals}, tasks=${showTasksInline}, dependencies=${showDependencyInfo}`);
-
-        } catch (error) {
-            this.logError('Failed to configure tree provider', error);
-        }
-    }
-
-    private async showWelcomeMessage(): Promise<void> {
-        const createGoalAction = 'Create First Goal';
-        const learnMoreAction = 'Learn More';
-        
-        const selection = await window.showInformationMessage(
-            'Welcome to Goal Tree! Start organizing your goals and tracking dependencies.',
-            createGoalAction,
-            learnMoreAction
-        );
-
-        switch (selection) {
-            case createGoalAction:
-                await commands.executeCommand('goalTree.createGoal');
-                break;
-            case learnMoreAction:
-                // Could open documentation or show quick tips
-                await this.showQuickTips();
-                break;
-        }
-    }
-
-    private async showQuickTips(): Promise<void> {
-        const tips = [
-            '📝 Right-click goals to add dependencies',
-            '🔗 Use "Show Dependencies" to visualize blocking relationships',
-            '✅ Add tasks to break down your goals',
-            '🚫 Visual indicators show blocked goals',
-            '⚙️ Configure display options in settings'
-        ];
-
-        await window.showInformationMessage(
-            `Goal Tree Quick Tips:\n\n${tips.join('\n')}`,
-            'Got it'
-        );
-    }
-
-    private log(message: string): void {
-        console.log(`[Goal Tree] ${message}`);
-    }
-
-    private logError(message: string, error: unknown): void {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        console.error(`[Goal Tree] ERROR: ${message} - ${errorMessage}`);
-    }
-}
-
-// ===========================================
-// VS Code Extension Entry Points
-// ===========================================
-
-let extensionInstance: GoalTreeExtensionImpl | undefined;
-
-/**
- * Extension activation function called by VS Code
- */
-export async function activate(context: ExtensionContext): Promise<void> {
-    try {
-        extensionInstance = new GoalTreeExtensionImpl(context);
-        await extensionInstance.activate();
-        
-        // Store extension instance in context for access by other parts
-        context.globalState.setKeysForSync(['goalTree.firstTime']);
-        
-    } catch (error) {
-        console.error('[Goal Tree] Extension activation failed:', error);
-        throw error;
-    }
+	// Reset context
+	vscode.commands.executeCommand('setContext', 'goalTree.enabled', false);
+	
+	console.log('Goal Tree extension deactivated successfully');
 }
 
 /**
- * Extension deactivation function called by VS Code
+ * Get the extension configuration
  */
-export async function deactivate(): Promise<void> {
-    try {
-        if (extensionInstance) {
-            await extensionInstance.deactivate();
-            extensionInstance = undefined;
-        }
-    } catch (error) {
-        console.error('[Goal Tree] Extension deactivation failed:', error);
-    }
+export function getConfig(): vscode.WorkspaceConfiguration {
+	return vscode.workspace.getConfiguration('goalTree');
 }
 
 /**
- * Get the current extension instance (for testing or external access)
+ * Initialize configuration values on extension startup
  */
-export function getExtensionInstance(): GoalTreeExtensionImpl | undefined {
-    return extensionInstance;
+function initializeConfiguration(context: vscode.ExtensionContext): void {
+	const config = getConfig();
+	
+	// Apply all configuration settings to tree provider
+	goalTreeProvider.setShowCompleted(config.get('showCompleted', true), context);
+	goalTreeProvider.setSortByTitle(config.get('sortByTitle', false), context);
+	goalTreeProvider.setGroupByStatus(config.get('groupByStatus', false), context);
+	goalTreeProvider.setAutoRefresh(config.get('autoRefresh', true), context);
+	
+	console.log('Goal Tree configuration initialized');
 }
+
+/**
+ * Handle configuration changes
+ */
+function handleConfigurationChange(event: vscode.ConfigurationChangeEvent, context: vscode.ExtensionContext): void {
+	const config = getConfig();
+	let needsRefresh = false;
+	
+	// Check for changes that affect tree display
+	if (event.affectsConfiguration('goalTree.showCompleted')) {
+		goalTreeProvider.setShowCompleted(config.get('showCompleted', true), context);
+		needsRefresh = true;
+	}
+	
+	if (event.affectsConfiguration('goalTree.sortByTitle')) {
+		goalTreeProvider.setSortByTitle(config.get('sortByTitle', false), context);
+		needsRefresh = true;
+	}
+	
+	if (event.affectsConfiguration('goalTree.groupByStatus')) {
+		goalTreeProvider.setGroupByStatus(config.get('groupByStatus', false), context);
+		needsRefresh = true;
+	}
+	
+	// Handle auto refresh setting
+	if (event.affectsConfiguration('goalTree.autoRefresh')) {
+		const autoRefresh = config.get('autoRefresh', true);
+		goalTreeProvider.setAutoRefresh(autoRefresh, context);
+		console.log(`Goal Tree auto refresh ${autoRefresh ? 'enabled' : 'disabled'}`);
+	}
+	
+	// Handle performance settings
+	if (event.affectsConfiguration('goalTree.performance')) {
+		// Update performance configuration if needed
+		const perfConfig = config.get('performance', {});
+		goalTreeProvider.updatePerformanceConfig(perfConfig);
+	}
+	
+	// Handle view state persistence
+	if (event.affectsConfiguration('goalTree.persistViewState')) {
+		const persistViewState = config.get('persistViewState', true);
+		if (persistViewState) {
+			goalTreeProvider.loadViewState(context);
+		}
+	}
+	
+	// Refresh tree if any display settings changed
+	if (needsRefresh) {
+		goalTreeProvider.refresh();
+		console.log('Goal Tree configuration updated and refreshed');
+	}
+}
+

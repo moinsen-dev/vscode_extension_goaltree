@@ -1,950 +1,1753 @@
 /**
- * TreeCommands - Command handlers for goal tree operations and dependency management
+ * TreeCommands.ts - Command handlers for goal tree operations
  * 
- * This module provides command handlers for all goal tree operations including
- * dependency management, visual operations, and tree view interactions.
+ * This file provides command implementations for all goal tree operations
+ * including goal/task creation, editing, status changes, and management.
+ * Commands are designed to work with both command palette and context menus.
  */
 
-import {
-    window,
-    commands,
-    TreeItem,
-    QuickPickItem,
-    QuickPickOptions,
-    InputBoxOptions,
-    MessageItem,
-    ProgressLocation,
-    CancellationToken
-} from 'vscode';
-
-import {
-    Goal,
-    GoalStatus,
-    GoalStatusType,
-    Task,
-    TaskStatus,
-    CreateGoalParams,
-    UpdateGoalParams,
-    CreateTaskParams,
-    UpdateTaskParams,
-    GoalUtils
-} from '../types';
-
-import { GoalManager } from '../services/GoalManager';
-import { GoalTreeProvider, GoalTreeItem, GoalTreeItemType } from '../providers/goalTreeProvider';
+import * as vscode from 'vscode';
+import { Goal, GoalStatus, TaskStatus } from '../types/Goal';
+import { StateManager } from '../services/stateManager';
+import { GoalManager } from '../services/goalManager';
+import { GoalTreeProvider } from '../providers/goalTreeProvider';
+import { ChangeNotificationService } from '../services/ChangeNotificationService';
+import { createLogger } from '../utils/logger';
+import { GoalUndoRedoService } from '../services/GoalUndoRedoService';
 
 /**
- * Interface for dependency resolver service (to be provided by Stream A)
- * This interface will be implemented when the DependencyResolver service is ready
- */
-interface IDependencyResolver {
-    createDependency(blockedGoalId: string, blockingGoalId: string): Promise<void>;
-    deleteDependency(blockedGoalId: string, blockingGoalId: string): Promise<void>;
-    getDependencyChain(goalId: string): Promise<string[]>;
-    detectCircularDependencies(): Promise<string[]>;
-    buildDependencyGraph(): Promise<any>;
-    queryDependencies(filter?: any): Promise<any[]>;
-    syncWithGoalManager(): Promise<void>;
-}
-
-/**
- * Quick pick item for goal selection
- */
-interface GoalQuickPickItem extends QuickPickItem {
-    goalId: string;
-    goal: Goal;
-}
-
-/**
- * Dependency chain visualization item
- */
-interface DependencyChainItem {
-    goalId: string;
-    title: string;
-    status: GoalStatusType;
-    level: number;
-    isDirectDependency: boolean;
-}
-
-/**
- * Tree commands handler class
+ * Tree command handler class - manages all tree-related commands
  */
 export class TreeCommands {
-    private goalManager: GoalManager;
-    private treeProvider: GoalTreeProvider;
-    private dependencyResolver?: IDependencyResolver; // Will be injected when available
+    private logger = createLogger('TreeCommands');
+    private undoRedoService?: GoalUndoRedoService;
 
-    constructor(goalManager: GoalManager, treeProvider: GoalTreeProvider) {
-        this.goalManager = goalManager;
-        this.treeProvider = treeProvider;
+    constructor(
+        private stateManager: StateManager,
+        private goalManager: GoalManager,
+        private treeProvider: GoalTreeProvider,
+        private changeNotificationService: ChangeNotificationService,
+        undoRedoService?: GoalUndoRedoService
+    ) {
+        this.undoRedoService = undoRedoService;
     }
-
-    // ===========================================
-    // Dependency Resolver Integration
-    // ===========================================
 
     /**
-     * Set the dependency resolver instance (called by Stream A when ready)
+     * Register all tree commands with VS Code
+     * Enhanced with better error handling and validation
      */
-    public setDependencyResolver(resolver: IDependencyResolver): void {
-        this.dependencyResolver = resolver;
-    }
+    registerCommands(context: vscode.ExtensionContext): void {
+        if (!context) {
+            this.logger.error('Cannot register commands: invalid extension context');
+            throw new Error('Extension context is required for command registration');
+        }
 
-    // ===========================================
-    // Goal Selection Commands
-    // ===========================================
+        const commandDefinitions = [
+            // Goal creation commands
+            { id: 'goalTree.createGoal', handler: this.createGoal.bind(this), category: 'Goal Creation' },
+            { id: 'goalTree.createSubGoal', handler: this.createSubGoal.bind(this), category: 'Goal Creation' },
+            { id: 'goalTree.duplicateGoal', handler: this.duplicateGoal.bind(this), category: 'Goal Creation' },
 
-    public async selectGoal(goalId: string): Promise<void> {
-        try {
-            const goal = this.goalManager.getGoal(goalId);
-            if (!goal) {
-                window.showErrorMessage(`Goal with ID ${goalId} not found`);
-                return;
+            // Task commands
+            { id: 'goalTree.addTask', handler: this.addTask.bind(this), category: 'Task Management' },
+            { id: 'goalTree.toggleTask', handler: this.toggleTask.bind(this), category: 'Task Management' },
+            { id: 'goalTree.moveTaskUp', handler: this.moveTaskUp.bind(this), category: 'Task Management' },
+            { id: 'goalTree.moveTaskDown', handler: this.moveTaskDown.bind(this), category: 'Task Management' },
+            { id: 'goalTree.editTask', handler: this.editTask.bind(this), category: 'Task Management' },
+            { id: 'goalTree.deleteTask', handler: this.deleteTask.bind(this), category: 'Task Management' },
+
+            // Goal editing commands
+            { id: 'goalTree.editGoal', handler: this.editGoal.bind(this), category: 'Goal Management' },
+            { id: 'goalTree.deleteGoal', handler: this.deleteGoal.bind(this), category: 'Goal Management' },
+
+            // Status management commands
+            { id: 'goalTree.markPlanned', handler: this.markPlanned.bind(this), category: 'Status Management' },
+            { id: 'goalTree.markInProgress', handler: this.markInProgress.bind(this), category: 'Status Management' },
+            { id: 'goalTree.markCompleted', handler: this.markCompleted.bind(this), category: 'Status Management' },
+            { id: 'goalTree.markBlocked', handler: this.markBlocked.bind(this), category: 'Status Management' },
+
+            // Dependency management commands
+            { id: 'goalTree.addDependency', handler: this.addDependency.bind(this), category: 'Dependency Management' },
+            { id: 'goalTree.removeDependency', handler: this.removeDependency.bind(this), category: 'Dependency Management' },
+            { id: 'goalTree.showDependencies', handler: this.showDependencies.bind(this), category: 'Dependency Management' },
+
+            // View management commands
+            { id: 'goalTree.refreshView', handler: this.refreshView.bind(this), category: 'View Management' },
+            { id: 'goalTree.openView', handler: this.openView.bind(this), category: 'View Management' },
+            { id: 'goalTree.expandAll', handler: this.expandAll.bind(this), category: 'View Management' },
+            { id: 'goalTree.collapseAll', handler: this.collapseAll.bind(this), category: 'View Management' },
+
+            // Configuration commands
+            { id: 'goalTree.toggleShowCompleted', handler: this.toggleShowCompleted.bind(this), category: 'Configuration' },
+            { id: 'goalTree.toggleSortByTitle', handler: this.toggleSortByTitle.bind(this), category: 'Configuration' },
+            { id: 'goalTree.toggleGroupByStatus', handler: this.toggleGroupByStatus.bind(this), category: 'Configuration' },
+
+            // Search and filter commands
+            { id: 'goalTree.searchGoals', handler: this.searchGoals.bind(this), category: 'Search & Filter' },
+            { id: 'goalTree.filterByStatus', handler: this.filterByStatus.bind(this), category: 'Search & Filter' },
+            { id: 'goalTree.showOnlyBlocked', handler: this.showOnlyBlocked.bind(this), category: 'Search & Filter' },
+            { id: 'goalTree.showOnlyHighPriority', handler: this.showOnlyHighPriority.bind(this), category: 'Search & Filter' },
+
+            // Navigation commands
+            { id: 'goalTree.goToParent', handler: this.goToParent.bind(this), category: 'Navigation' },
+            { id: 'goalTree.goToFirstChild', handler: this.goToFirstChild.bind(this), category: 'Navigation' },
+            { id: 'goalTree.focusNextGoal', handler: this.focusNextGoal.bind(this), category: 'Navigation' },
+            { id: 'goalTree.focusPreviousGoal', handler: this.focusPreviousGoal.bind(this), category: 'Navigation' },
+
+            // Additional enhanced commands
+            { id: 'goalTree.focusGoal', handler: this.focusGoal.bind(this), category: 'Navigation' },
+            { id: 'goalTree.exportGoal', handler: this.exportGoal.bind(this), category: 'Data Management' },
+            { id: 'goalTree.importGoals', handler: this.importGoals.bind(this), category: 'Data Management' },
+            { id: 'goalTree.exportAll', handler: this.exportAll.bind(this), category: 'Data Management' },
+
+            // Undo/Redo commands
+            { id: 'goalTree.undo', handler: this.undo.bind(this), category: 'Undo/Redo' },
+            { id: 'goalTree.redo', handler: this.redo.bind(this), category: 'Undo/Redo' },
+            { id: 'goalTree.showUndoHistory', handler: this.showUndoHistory.bind(this), category: 'Undo/Redo' },
+            { id: 'goalTree.clearUndoHistory', handler: this.clearUndoHistory.bind(this), category: 'Undo/Redo' },
+            { id: 'goalTree.createSnapshot', handler: this.createSnapshot.bind(this), category: 'Undo/Redo' },
+            { id: 'goalTree.showSnapshots', handler: this.showSnapshots.bind(this), category: 'Undo/Redo' }
+        ];
+
+        const registeredCommands: vscode.Disposable[] = [];
+        const registrationErrors: { command: string; error: any }[] = [];
+
+        // Register commands with individual error handling
+        for (const commandDef of commandDefinitions) {
+            try {
+                const disposable = vscode.commands.registerCommand(commandDef.id, this.wrapCommandHandler(commandDef.handler, commandDef.id));
+                registeredCommands.push(disposable);
+                context.subscriptions.push(disposable);
+                
+                this.logger.debug('Command registered successfully', { 
+                    command: commandDef.id, 
+                    category: commandDef.category 
+                });
+            } catch (error) {
+                const errorInfo = { command: commandDef.id, error };
+                registrationErrors.push(errorInfo);
+                this.logger.error('Failed to register command', errorInfo);
             }
+        }
 
-            // Show goal details in a quick pick with actions
-            const actions: QuickPickItem[] = [
-                {
-                    label: '$(edit) Edit Goal',
-                    description: 'Modify goal title, description, or status'
-                },
-                {
-                    label: '$(add) Add Task',
-                    description: 'Add a new task to this goal'
-                },
-                {
-                    label: '$(add) Add Child Goal',
-                    description: 'Create a child goal'
-                },
-                {
-                    label: '$(link) Manage Dependencies',
-                    description: 'Add or remove goal dependencies'
-                },
-                {
-                    label: '$(list-tree) Show Dependencies',
-                    description: 'View dependency chain visualization'
-                },
-                {
-                    label: '$(trash) Delete Goal',
-                    description: 'Delete this goal and all its children'
-                }
-            ];
+        // Report registration results
+        const successCount = registeredCommands.length;
+        const errorCount = registrationErrors.length;
+        
+        if (errorCount > 0) {
+            const errorMessage = `Failed to register ${errorCount} commands: ${registrationErrors.map(e => e.command).join(', ')}`;
+            this.logger.error(errorMessage, { errors: registrationErrors });
+            vscode.window.showWarningMessage(`Goal Tree: Some commands failed to register. Check logs for details.`);
+        }
 
-            const selected = await window.showQuickPick(actions, {
-                title: `Actions for: ${goal.title}`,
-                placeHolder: 'Select an action to perform'
-            });
+        this.logger.info('Command registration completed', { 
+            successCount, 
+            errorCount, 
+            totalCommands: commandDefinitions.length 
+        });
 
-            if (!selected) return;
-
-            switch (selected.label) {
-                case '$(edit) Edit Goal':
-                    await this.editGoal(goalId);
-                    break;
-                case '$(add) Add Task':
-                    await this.addTask(goalId);
-                    break;
-                case '$(add) Add Child Goal':
-                    await this.createChildGoal(goalId);
-                    break;
-                case '$(link) Manage Dependencies':
-                    await this.manageDependencies(goalId);
-                    break;
-                case '$(list-tree) Show Dependencies':
-                    await this.showDependencies(goalId);
-                    break;
-                case '$(trash) Delete Goal':
-                    await this.deleteGoal(goalId);
-                    break;
-            }
-
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-            window.showErrorMessage(`Failed to select goal: ${errorMessage}`);
+        if (successCount === 0) {
+            throw new Error('Failed to register any commands. Extension cannot function properly.');
         }
     }
 
-    public async selectTask(goalId: string, taskId: string): Promise<void> {
+    /**
+     * Wrap command handlers with error handling and logging
+     */
+    private wrapCommandHandler<T extends any[]>(handler: (...args: T) => Promise<void> | void, commandId: string) {
+        return async (...args: T): Promise<void> => {
+            const startTime = Date.now();
+            try {
+                this.logger.debug('Command execution started', { command: commandId, args: args.length });
+                await handler(...args);
+                const duration = Date.now() - startTime;
+                this.logger.debug('Command execution completed', { command: commandId, duration });
+            } catch (error) {
+                const duration = Date.now() - startTime;
+                this.logger.error('Command execution failed', { 
+                    command: commandId, 
+                    duration,
+                    error: error instanceof Error ? error.message : String(error),
+                    stack: error instanceof Error ? error.stack : undefined
+                });
+                
+                // Show user-friendly error message
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                vscode.window.showErrorMessage(`Command failed: ${errorMessage}`);
+            }
+        };
+    }
+
+    // Goal Creation Commands
+
+    /**
+     * Create a new root-level goal
+     */
+    async createGoal(): Promise<void> {
         try {
-            const goal = this.goalManager.getGoal(goalId);
+            const goalTitle = await vscode.window.showInputBox({
+                prompt: 'Enter goal title',
+                placeHolder: 'My new goal...',
+                validateInput: (value) => {
+                    if (!value.trim()) {
+                        return 'Goal title cannot be empty';
+                    }
+                    if (value.length > 100) {
+                        return 'Goal title must be 100 characters or less';
+                    }
+                    return null;
+                }
+            });
+
+            if (!goalTitle) {
+                return; // User cancelled
+            }
+
+            const description = await vscode.window.showInputBox({
+                prompt: 'Enter goal description (optional)',
+                placeHolder: 'Describe your goal...'
+            });
+
+            const goal = await this.goalManager.createGoal({
+                title: goalTitle.trim(),
+                description: description?.trim()
+            });
+
+            this.treeProvider.refresh();
+            this.changeNotificationService.fire({ type: 'goal:created', data: { goalId: goal.id, goal }, timestamp: new Date() });
+            
+            vscode.window.showInformationMessage(`Goal created: ${goalTitle}`);
+            this.logger.info('Goal created successfully', { goalId: goal.id, title: goalTitle });
+
+            // Expand to show the new goal
+            await vscode.commands.executeCommand('goalTreeView.reveal', goal.id, {
+                select: true,
+                focus: true,
+                expand: true
+            });
+
+        } catch (error) {
+            this.logger.error('Failed to create goal', error);
+            vscode.window.showErrorMessage(`Failed to create goal: ${error}`);
+        }
+    }
+
+    /**
+     * Create a sub-goal under the selected goal
+     */
+    async createSubGoal(goalId?: string): Promise<void> {
+        try {
+            // If no goalId provided, get from tree selection or prompt
+            if (!goalId) {
+                goalId = await this.getSelectedGoalId();
+                if (!goalId) {
+                    return;
+                }
+            }
+
+            const parentGoal = this.stateManager.getGoal(goalId);
+            if (!parentGoal) {
+                vscode.window.showErrorMessage('Parent goal not found');
+                return;
+            }
+
+            const goalTitle = await vscode.window.showInputBox({
+                prompt: `Enter sub-goal title for "${parentGoal.title}"`,
+                placeHolder: 'Sub-goal title...',
+                validateInput: (value) => {
+                    if (!value.trim()) {
+                        return 'Sub-goal title cannot be empty';
+                    }
+                    if (value.length > 100) {
+                        return 'Sub-goal title must be 100 characters or less';
+                    }
+                    return null;
+                }
+            });
+
+            if (!goalTitle) {
+                return; // User cancelled
+            }
+
+            const description = await vscode.window.showInputBox({
+                prompt: 'Enter sub-goal description (optional)',
+                placeHolder: 'Describe your sub-goal...'
+            });
+
+            const subGoal = await this.goalManager.createGoal({
+                title: goalTitle.trim(),
+                description: description?.trim(),
+                parentId: goalId
+            });
+
+            this.treeProvider.refresh();
+            this.changeNotificationService.fire({ type: 'goal:created', data: { goalId: subGoal.id, goal: subGoal, parentId: goalId }, timestamp: new Date() });
+            
+            vscode.window.showInformationMessage(`Sub-goal created: ${goalTitle}`);
+            this.logger.info('Sub-goal created successfully', { goalId: subGoal.id, parentId: goalId, title: goalTitle });
+
+            // Expand parent and reveal the new sub-goal
+            await vscode.commands.executeCommand('goalTreeView.reveal', subGoal.id, {
+                select: true,
+                focus: true,
+                expand: true
+            });
+
+        } catch (error) {
+            this.logger.error('Failed to create sub-goal', error);
+            vscode.window.showErrorMessage(`Failed to create sub-goal: ${error}`);
+        }
+    }
+
+    /**
+     * Duplicate an existing goal
+     */
+    async duplicateGoal(goalId?: string): Promise<void> {
+        try {
+            if (!goalId) {
+                goalId = await this.getSelectedGoalId();
+                if (!goalId) {
+                    return;
+                }
+            }
+
+            const goal = this.stateManager.getGoal(goalId);
             if (!goal) {
-                window.showErrorMessage(`Goal with ID ${goalId} not found`);
+                vscode.window.showErrorMessage('Goal not found');
+                return;
+            }
+
+            const newTitle = await vscode.window.showInputBox({
+                prompt: 'Enter title for duplicated goal',
+                value: `${goal.title} (Copy)`,
+                validateInput: (value) => {
+                    if (!value.trim()) {
+                        return 'Goal title cannot be empty';
+                    }
+                    if (value.length > 100) {
+                        return 'Goal title must be 100 characters or less';
+                    }
+                    return null;
+                }
+            });
+
+            if (!newTitle) {
+                return; // User cancelled
+            }
+
+            // Manually duplicate goal since duplicateGoal method doesn't exist
+            const originalGoal = this.stateManager.getGoal(goalId)!;
+            const duplicatedGoal = await this.goalManager.createGoal({
+                title: newTitle.trim(),
+                description: originalGoal.description,
+                parentId: originalGoal.parentId
+            });
+
+            this.treeProvider.refresh();
+            this.changeNotificationService.fire({ type: 'goal:created', data: { goalId: duplicatedGoal.id, goal: duplicatedGoal }, timestamp: new Date() });
+            
+            vscode.window.showInformationMessage(`Goal duplicated: ${newTitle}`);
+            this.logger.info('Goal duplicated successfully', { originalId: goalId, newId: duplicatedGoal.id });
+
+            // Reveal the duplicated goal
+            await vscode.commands.executeCommand('goalTreeView.reveal', duplicatedGoal.id, {
+                select: true,
+                focus: true,
+                expand: true
+            });
+
+        } catch (error) {
+            this.logger.error('Failed to duplicate goal', error);
+            vscode.window.showErrorMessage(`Failed to duplicate goal: ${error}`);
+        }
+    }
+
+    // Task Commands
+
+    /**
+     * Add a task to a goal
+     */
+    async addTask(goalId?: string): Promise<void> {
+        try {
+            if (!goalId) {
+                goalId = await this.getSelectedGoalId();
+                if (!goalId) {
+                    return;
+                }
+            }
+
+            const goal = this.stateManager.getGoal(goalId);
+            if (!goal) {
+                vscode.window.showErrorMessage('Goal not found');
+                return;
+            }
+
+            const taskTitle = await vscode.window.showInputBox({
+                prompt: `Add task to "${goal.title}"`,
+                placeHolder: 'Task description...',
+                validateInput: (value) => {
+                    if (!value.trim()) {
+                        return 'Task title cannot be empty';
+                    }
+                    if (value.length > 200) {
+                        return 'Task title must be 200 characters or less';
+                    }
+                    return null;
+                }
+            });
+
+            if (!taskTitle) {
+                return; // User cancelled
+            }
+
+            const task = await this.goalManager.addTask(goalId, {
+                title: taskTitle.trim()
+            });
+
+            this.treeProvider.refresh();
+            this.changeNotificationService.fire({ type: 'task:created', data: { goalId, taskId: task.id, task }, timestamp: new Date() });
+            
+            vscode.window.showInformationMessage(`Task added: ${taskTitle}`);
+            this.logger.info('Task created successfully', { goalId, taskId: task.id, title: taskTitle });
+
+            // Expand parent goal to show the new task
+            await vscode.commands.executeCommand('goalTreeView.reveal', `${goalId}:${task.id}`, {
+                select: true,
+                focus: true
+            });
+
+        } catch (error) {
+            this.logger.error('Failed to create task', error);
+            vscode.window.showErrorMessage(`Failed to create task: ${error}`);
+        }
+    }
+
+    /**
+     * Toggle task completion status
+     */
+    async toggleTask(goalId?: string, taskId?: string): Promise<void> {
+        try {
+            if (!goalId || !taskId) {
+                const selection = await this.getSelectedTaskId();
+                if (!selection) {
+                    return;
+                }
+                goalId = selection.goalId;
+                taskId = selection.taskId;
+            }
+
+            const goal = this.stateManager.getGoal(goalId);
+            if (!goal) {
+                vscode.window.showErrorMessage('Goal not found');
                 return;
             }
 
             const task = goal.tasks.find(t => t.id === taskId);
             if (!task) {
-                window.showErrorMessage(`Task with ID ${taskId} not found`);
+                vscode.window.showErrorMessage('Task not found');
                 return;
             }
 
-            // Show task actions
-            const actions: QuickPickItem[] = [
-                {
-                    label: '$(edit) Edit Task',
-                    description: 'Modify task title or description'
-                },
-                {
-                    label: '$(check) Toggle Status',
-                    description: `Mark as ${task.status === TaskStatus.DONE ? 'not done' : 'done'}`
-                },
-                {
-                    label: '$(trash) Delete Task',
-                    description: 'Remove this task from the goal'
-                }
-            ];
-
-            const selected = await window.showQuickPick(actions, {
-                title: `Task: ${task.title}`,
-                placeHolder: 'Select an action to perform'
-            });
-
-            if (!selected) return;
-
-            switch (selected.label) {
-                case '$(edit) Edit Task':
-                    await this.editTask(goalId, taskId);
+            // Cycle through task statuses: todo -> in-progress -> done -> todo
+            let newStatus: TaskStatus;
+            switch (task.status) {
+                case TaskStatus.TODO:
+                    newStatus = TaskStatus.IN_PROGRESS;
                     break;
-                case '$(check) Toggle Status':
-                    await this.toggleTaskStatus(goalId, taskId);
+                case TaskStatus.IN_PROGRESS:
+                    newStatus = TaskStatus.DONE;
                     break;
-                case '$(trash) Delete Task':
-                    await this.deleteTask(goalId, taskId);
+                case TaskStatus.DONE:
+                    newStatus = TaskStatus.TODO;
                     break;
+                default:
+                    newStatus = TaskStatus.IN_PROGRESS;
             }
 
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-            window.showErrorMessage(`Failed to select task: ${errorMessage}`);
-        }
-    }
-
-    // ===========================================
-    // Dependency Management Commands
-    // ===========================================
-
-    public async addDependency(goalId?: string): Promise<void> {
-        try {
-            // If goalId is provided, use it; otherwise let user select
-            let blockedGoal: Goal;
-            
-            if (goalId) {
-                const goal = this.goalManager.getGoal(goalId);
-                if (!goal) {
-                    window.showErrorMessage(`Goal with ID ${goalId} not found`);
-                    return;
-                }
-                blockedGoal = goal;
-            } else {
-                const selectedBlocked = await this.selectGoalFromList('Select goal to be blocked:');
-                if (!selectedBlocked) return;
-                blockedGoal = selectedBlocked;
-            }
-
-            // Select the blocking goal
-            const allGoals = this.goalManager.getAllGoals()
-                .filter(g => g.id !== blockedGoal.id && !blockedGoal.blockedByIds.includes(g.id));
-
-            if (allGoals.length === 0) {
-                window.showInformationMessage('No available goals to create dependency with');
-                return;
-            }
-
-            const blockingGoalItems: GoalQuickPickItem[] = allGoals.map(goal => ({
-                label: goal.title,
-                description: `Status: ${goal.status}`,
-                detail: goal.description,
-                goalId: goal.id,
-                goal
-            }));
-
-            const selectedBlocking = await window.showQuickPick(blockingGoalItems, {
-                title: `Select goal that blocks "${blockedGoal.title}":`,
-                placeHolder: 'Choose the blocking goal'
-            });
-
-            if (!selectedBlocking) return;
-
-            // Create the dependency using the appropriate service
-            if (this.dependencyResolver) {
-                await this.dependencyResolver.createDependency(blockedGoal.id, selectedBlocking.goalId);
-                window.showInformationMessage(`Created dependency: "${blockedGoal.title}" is now blocked by "${selectedBlocking.goal.title}"`);
-            } else {
-                // Fallback to basic GoalManager functionality
-                await this.goalManager.addBlockingDependency(blockedGoal.id, selectedBlocking.goalId);
-                window.showInformationMessage(`Added dependency: "${blockedGoal.title}" is now blocked by "${selectedBlocking.goal.title}"`);
-            }
+            await this.goalManager.updateTask(goalId, taskId, { status: newStatus });
 
             this.treeProvider.refresh();
+            this.changeNotificationService.fire({ type: 'task:status-changed', data: { goalId, taskId, newStatus, oldStatus: task.status }, timestamp: new Date() });
+
+            this.logger.info('Task status toggled', { goalId, taskId, newStatus, oldStatus: task.status });
 
         } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-            window.showErrorMessage(`Failed to add dependency: ${errorMessage}`);
+            this.logger.error('Failed to toggle task', error);
+            vscode.window.showErrorMessage(`Failed to toggle task: ${error}`);
         }
     }
 
-    public async removeDependency(goalId?: string): Promise<void> {
+    /**
+     * Move task up in order
+     */
+    async moveTaskUp(goalId?: string, taskId?: string): Promise<void> {
         try {
-            // If goalId is provided, use it; otherwise let user select
-            let blockedGoal: Goal;
-            
-            if (goalId) {
-                const goal = this.goalManager.getGoal(goalId);
-                if (!goal) {
-                    window.showErrorMessage(`Goal with ID ${goalId} not found`);
+            if (!goalId || !taskId) {
+                const selection = await this.getSelectedTaskId();
+                if (!selection) {
                     return;
                 }
-                blockedGoal = goal;
-            } else {
-                const selectedBlocked = await this.selectGoalFromList('Select blocked goal:', goal => goal.blockedByIds.length > 0);
-                if (!selectedBlocked) return;
-                blockedGoal = selectedBlocked;
+                goalId = selection.goalId;
+                taskId = selection.taskId;
             }
 
-            if (blockedGoal.blockedByIds.length === 0) {
-                window.showInformationMessage(`"${blockedGoal.title}" has no dependencies to remove`);
+            // moveTask method not available - need manual task reordering
+            const goal = this.stateManager.getGoal(goalId);
+            if (!goal) return;
+            const task = goal.tasks.find(t => t.id === taskId);
+            if (!task) return;
+            // For now, just show a message that this feature needs implementation
+            vscode.window.showWarningMessage('Task reordering not yet implemented');
+            return;
+
+            this.treeProvider.refresh();
+            this.changeNotificationService.fire({ type: 'task:updated', data: { goalId, taskId }, timestamp: new Date() });
+            
+            this.logger.info('Task moved up', { goalId, taskId });
+
+        } catch (error) {
+            this.logger.error('Failed to move task up', error);
+            vscode.window.showErrorMessage(`Failed to move task up: ${error}`);
+        }
+    }
+
+    /**
+     * Move task down in order
+     */
+    async moveTaskDown(goalId?: string, taskId?: string): Promise<void> {
+        try {
+            if (!goalId || !taskId) {
+                const selection = await this.getSelectedTaskId();
+                if (!selection) {
+                    return;
+                }
+                goalId = selection.goalId;
+                taskId = selection.taskId;
+            }
+
+            // moveTask method not available - need manual task reordering
+            const goal = this.stateManager.getGoal(goalId);
+            if (!goal) return;
+            const task = goal.tasks.find(t => t.id === taskId);
+            if (!task) return;
+            // For now, just show a message that this feature needs implementation
+            vscode.window.showWarningMessage('Task reordering not yet implemented');
+            return;
+
+            this.treeProvider.refresh();
+            this.changeNotificationService.fire({ type: 'task:updated', data: { goalId, taskId }, timestamp: new Date() });
+            
+            this.logger.info('Task moved down', { goalId, taskId });
+
+        } catch (error) {
+            this.logger.error('Failed to move task down', error);
+            vscode.window.showErrorMessage(`Failed to move task down: ${error}`);
+        }
+    }
+
+    /**
+     * Edit a task
+     */
+    async editTask(goalId?: string, taskId?: string): Promise<void> {
+        try {
+            if (!goalId || !taskId) {
+                const selection = await this.getSelectedTaskId();
+                if (!selection) {
+                    return;
+                }
+                goalId = selection.goalId;
+                taskId = selection.taskId;
+            }
+
+            const goal = this.stateManager.getGoal(goalId);
+            if (!goal) {
+                vscode.window.showErrorMessage('Goal not found');
                 return;
             }
 
-            // Select which blocking dependency to remove
-            const blockingGoals = this.goalManager.getBlockingGoals(blockedGoal.id);
-            const blockingItems: GoalQuickPickItem[] = blockingGoals.map(goal => ({
-                label: goal.title,
-                description: `Status: ${goal.status}`,
-                detail: goal.description,
-                goalId: goal.id,
-                goal
-            }));
+            const task = goal.tasks.find(t => t.id === taskId);
+            if (!task) {
+                vscode.window.showErrorMessage('Task not found');
+                return;
+            }
 
-            const selectedBlocking = await window.showQuickPick(blockingItems, {
-                title: `Remove dependency from "${blockedGoal.title}":`,
-                placeHolder: 'Select the blocking goal to remove'
+            const newTitle = await vscode.window.showInputBox({
+                prompt: 'Edit task title',
+                value: task.title,
+                validateInput: (value) => {
+                    if (!value.trim()) {
+                        return 'Task title cannot be empty';
+                    }
+                    if (value.length > 200) {
+                        return 'Task title must be 200 characters or less';
+                    }
+                    return null;
+                }
             });
 
-            if (!selectedBlocking) return;
+            if (newTitle === undefined) {
+                return; // User cancelled
+            }
 
-            // Confirm removal
-            const confirmItem: MessageItem = { title: 'Remove' };
-            const cancelItem: MessageItem = { title: 'Cancel', isCloseAffordance: true };
+            const newDescription = await vscode.window.showInputBox({
+                prompt: 'Edit task description (optional)',
+                value: task.description ?? '',
+                placeHolder: 'Task description...'
+            });
+
+            await this.goalManager.updateTask(goalId, taskId, {
+                title: newTitle.trim(),
+                description: newDescription?.trim() ?? undefined
+            });
+
+            this.treeProvider.refresh();
+            this.changeNotificationService.fire({ type: 'task:updated', data: { goalId, taskId }, timestamp: new Date() });
             
-            const confirmation = await window.showWarningMessage(
-                `Remove dependency: "${blockedGoal.title}" blocked by "${selectedBlocking.goal.title}"?`,
-                confirmItem,
-                cancelItem
+            vscode.window.showInformationMessage(`Task updated: ${newTitle}`);
+            this.logger.info('Task edited successfully', { goalId, taskId, newTitle });
+
+        } catch (error) {
+            this.logger.error('Failed to edit task', error);
+            vscode.window.showErrorMessage(`Failed to edit task: ${error}`);
+        }
+    }
+
+    /**
+     * Delete a task
+     */
+    async deleteTask(goalId?: string, taskId?: string): Promise<void> {
+        try {
+            if (!goalId || !taskId) {
+                const selection = await this.getSelectedTaskId();
+                if (!selection) {
+                    return;
+                }
+                goalId = selection.goalId;
+                taskId = selection.taskId;
+            }
+
+            const goal = this.stateManager.getGoal(goalId);
+            if (!goal) {
+                vscode.window.showErrorMessage('Goal not found');
+                return;
+            }
+
+            const task = goal.tasks.find(t => t.id === taskId);
+            if (!task) {
+                vscode.window.showErrorMessage('Task not found');
+                return;
+            }
+
+            const confirmation = await vscode.window.showWarningMessage(
+                `Are you sure you want to delete task "${task.title}"?`,
+                { modal: true },
+                'Delete'
             );
 
-            if (confirmation !== confirmItem) return;
-
-            // Remove the dependency
-            if (this.dependencyResolver) {
-                await this.dependencyResolver.deleteDependency(blockedGoal.id, selectedBlocking.goalId);
-                window.showInformationMessage(`Removed dependency: "${blockedGoal.title}" is no longer blocked by "${selectedBlocking.goal.title}"`);
-            } else {
-                // Fallback to basic GoalManager functionality
-                await this.goalManager.removeBlockingDependency(blockedGoal.id, selectedBlocking.goalId);
-                window.showInformationMessage(`Removed dependency: "${blockedGoal.title}" is no longer blocked by "${selectedBlocking.goal.title}"`);
-            }
-
-            this.treeProvider.refresh();
-
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-            window.showErrorMessage(`Failed to remove dependency: ${errorMessage}`);
-        }
-    }
-
-    public async showDependencies(goalId: string): Promise<void> {
-        try {
-            const goal = this.goalManager.getGoal(goalId);
-            if (!goal) {
-                window.showErrorMessage(`Goal with ID ${goalId} not found`);
+            if (confirmation !== 'Delete') {
                 return;
             }
 
-            await window.withProgress({
-                location: ProgressLocation.Notification,
-                title: `Analyzing dependencies for "${goal.title}"`,
-                cancellable: false
-            }, async (progress) => {
-                progress.report({ increment: 25, message: 'Building dependency chain...' });
+            await this.goalManager.deleteTask(goalId, taskId);
 
-                // Build dependency chain visualization
-                const dependencyChain = await this.buildDependencyChainVisualization(goalId);
+            this.treeProvider.refresh();
+            this.changeNotificationService.fire({ type: 'task:deleted', data: { goalId, taskId }, timestamp: new Date() });
+            
+            vscode.window.showInformationMessage('Task deleted successfully');
+            this.logger.info('Task deleted successfully', { goalId, taskId });
 
-                progress.report({ increment: 50, message: 'Preparing visualization...' });
+        } catch (error) {
+            this.logger.error('Failed to delete task', error);
+            vscode.window.showErrorMessage(`Failed to delete task: ${error}`);
+        }
+    }
 
-                if (dependencyChain.length === 0) {
-                    window.showInformationMessage(`"${goal.title}" has no dependencies`);
+    // Goal Status Commands
+
+    /**
+     * Mark goal as planned
+     */
+    async markPlanned(goalId?: string): Promise<void> {
+        await this.changeGoalStatus(goalId, GoalStatus.PLANNED);
+    }
+
+    /**
+     * Mark goal as in progress
+     */
+    async markInProgress(goalId?: string): Promise<void> {
+        await this.changeGoalStatus(goalId, GoalStatus.IN_PROGRESS);
+    }
+
+    /**
+     * Mark goal as completed
+     */
+    async markCompleted(goalId?: string): Promise<void> {
+        await this.changeGoalStatus(goalId, GoalStatus.COMPLETED);
+    }
+
+    /**
+     * Mark goal as blocked
+     */
+    async markBlocked(goalId?: string): Promise<void> {
+        await this.changeGoalStatus(goalId, GoalStatus.BLOCKED);
+    }
+
+    /**
+     * Common method to change goal status
+     */
+    private async changeGoalStatus(goalId: string | undefined, status: GoalStatus): Promise<void> {
+        try {
+            if (!goalId) {
+                goalId = await this.getSelectedGoalId();
+                if (!goalId) {
                     return;
                 }
+            }
 
-                progress.report({ increment: 75, message: 'Formatting display...' });
-
-                // Create dependency chain display
-                const chainItems: QuickPickItem[] = dependencyChain.map(item => {
-                    const indent = '  '.repeat(item.level);
-                    const statusIcon = this.getStatusIcon(item.status);
-                    const dependencyIcon = item.isDirectDependency ? '🔗' : '⛓️';
-                    
-                    return {
-                        label: `${indent}${dependencyIcon} ${statusIcon} ${item.title}`,
-                        description: `Status: ${item.status}`,
-                        detail: item.isDirectDependency ? 'Direct dependency' : 'Indirect dependency'
-                    };
-                });
-
-                progress.report({ increment: 100, message: 'Complete' });
-
-                // Show the dependency chain
-                await window.showQuickPick(chainItems, {
-                    title: `Dependency Chain for: ${goal.title}`,
-                    placeHolder: 'Dependencies that must be completed first',
-                    canPickMany: false
-                });
-            });
-
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-            window.showErrorMessage(`Failed to show dependencies: ${errorMessage}`);
-        }
-    }
-
-    public async manageDependencies(goalId: string): Promise<void> {
-        try {
-            const goal = this.goalManager.getGoal(goalId);
+            const goal = this.stateManager.getGoal(goalId);
             if (!goal) {
-                window.showErrorMessage(`Goal with ID ${goalId} not found`);
+                vscode.window.showErrorMessage('Goal not found');
                 return;
             }
 
-            const actions: QuickPickItem[] = [
-                {
-                    label: '$(add) Add Dependency',
-                    description: 'Make this goal depend on another goal'
-                },
-                {
-                    label: '$(remove) Remove Dependency',
-                    description: 'Remove a blocking dependency'
-                },
-                {
-                    label: '$(list-tree) View Dependency Chain',
-                    description: 'Show all dependencies in a hierarchy'
-                },
-                {
-                    label: '$(search) Find Circular Dependencies',
-                    description: 'Check for circular dependency issues'
+            if (goal.status === status) {
+                vscode.window.showInformationMessage(`Goal is already ${status}`);
+                return;
+            }
+
+            await this.goalManager.updateGoal(goalId, { status });
+
+            this.treeProvider.refresh();
+            this.changeNotificationService.fire({ type: 'goal:status-changed', data: { goalId, newStatus: status, oldStatus: goal.status }, timestamp: new Date() });
+            
+            vscode.window.showInformationMessage(`Goal marked as ${status}: ${goal.title}`);
+            this.logger.info('Goal status changed', { goalId, newStatus: status, oldStatus: goal.status });
+
+        } catch (error) {
+            this.logger.error(`Failed to mark goal as ${status}`, error);
+            vscode.window.showErrorMessage(`Failed to mark goal as ${status}: ${error}`);
+        }
+    }
+
+    // Goal Editing Commands
+
+    /**
+     * Edit a goal
+     */
+    async editGoal(goalId?: string): Promise<void> {
+        try {
+            if (!goalId) {
+                goalId = await this.getSelectedGoalId();
+                if (!goalId) {
+                    return;
                 }
-            ];
-
-            const selected = await window.showQuickPick(actions, {
-                title: `Manage Dependencies: ${goal.title}`,
-                placeHolder: 'Select a dependency management action'
-            });
-
-            if (!selected) return;
-
-            switch (selected.label) {
-                case '$(add) Add Dependency':
-                    await this.addDependency(goalId);
-                    break;
-                case '$(remove) Remove Dependency':
-                    await this.removeDependency(goalId);
-                    break;
-                case '$(list-tree) View Dependency Chain':
-                    await this.showDependencies(goalId);
-                    break;
-                case '$(search) Find Circular Dependencies':
-                    await this.checkCircularDependencies();
-                    break;
             }
 
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-            window.showErrorMessage(`Failed to manage dependencies: ${errorMessage}`);
-        }
-    }
-
-    // ===========================================
-    // Goal CRUD Commands
-    // ===========================================
-
-    public async createGoal(): Promise<void> {
-        try {
-            const title = await window.showInputBox({
-                title: 'Create New Goal',
-                placeHolder: 'Enter goal title',
-                prompt: 'What do you want to accomplish?'
-            });
-
-            if (!title) return;
-
-            const description = await window.showInputBox({
-                title: 'Goal Description (Optional)',
-                placeHolder: 'Enter detailed description',
-                prompt: 'Describe your goal in more detail'
-            });
-
-            // Ask if this should be a child goal
-            const parentGoal = await this.selectGoalFromList('Select parent goal (optional):', undefined, true);
-
-            const params: CreateGoalParams = {
-                title: title.trim(),
-                description: description?.trim() || undefined,
-                parentId: parentGoal?.id
-            };
-
-            const newGoal = await this.goalManager.createGoal(params);
-            window.showInformationMessage(`Created goal: "${newGoal.title}"`);
-            this.treeProvider.refresh();
-
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-            window.showErrorMessage(`Failed to create goal: ${errorMessage}`);
-        }
-    }
-
-    public async createChildGoal(parentId: string): Promise<void> {
-        try {
-            const parent = this.goalManager.getGoal(parentId);
-            if (!parent) {
-                window.showErrorMessage(`Parent goal with ID ${parentId} not found`);
-                return;
-            }
-
-            const title = await window.showInputBox({
-                title: `Create Child Goal for: ${parent.title}`,
-                placeHolder: 'Enter child goal title',
-                prompt: 'What sub-goal do you want to create?'
-            });
-
-            if (!title) return;
-
-            const description = await window.showInputBox({
-                title: 'Child Goal Description (Optional)',
-                placeHolder: 'Enter detailed description',
-                prompt: 'Describe your child goal in more detail'
-            });
-
-            const params: CreateGoalParams = {
-                title: title.trim(),
-                description: description?.trim() || undefined,
-                parentId
-            };
-
-            const newGoal = await this.goalManager.createGoal(params);
-            window.showInformationMessage(`Created child goal: "${newGoal.title}" under "${parent.title}"`);
-            this.treeProvider.refresh();
-
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-            window.showErrorMessage(`Failed to create child goal: ${errorMessage}`);
-        }
-    }
-
-    public async editGoal(goalId: string): Promise<void> {
-        try {
-            const goal = this.goalManager.getGoal(goalId);
+            const goal = this.stateManager.getGoal(goalId);
             if (!goal) {
-                window.showErrorMessage(`Goal with ID ${goalId} not found`);
+                vscode.window.showErrorMessage('Goal not found');
                 return;
             }
 
-            // Edit title
-            const newTitle = await window.showInputBox({
-                title: 'Edit Goal Title',
+            const newTitle = await vscode.window.showInputBox({
+                prompt: 'Edit goal title',
                 value: goal.title,
-                placeHolder: 'Enter goal title'
+                validateInput: (value) => {
+                    if (!value.trim()) {
+                        return 'Goal title cannot be empty';
+                    }
+                    if (value.length > 100) {
+                        return 'Goal title must be 100 characters or less';
+                    }
+                    return null;
+                }
             });
 
-            if (newTitle === undefined) return; // User cancelled
+            if (newTitle === undefined) {
+                return; // User cancelled
+            }
 
-            // Edit description
-            const newDescription = await window.showInputBox({
-                title: 'Edit Goal Description',
-                value: goal.description || '',
-                placeHolder: 'Enter goal description (optional)'
+            const newDescription = await vscode.window.showInputBox({
+                prompt: 'Edit goal description (optional)',
+                value: goal.description ?? '',
+                placeHolder: 'Goal description...'
             });
 
-            if (newDescription === undefined) return; // User cancelled
-
-            // Edit status
-            const statusItems: QuickPickItem[] = Object.values(GoalStatus).map(status => ({
-                label: status,
-                picked: status === goal.status
-            }));
-
-            const selectedStatus = await window.showQuickPick(statusItems, {
-                title: 'Select Goal Status',
-                placeHolder: 'Choose the current status of this goal'
-            });
-
-            if (!selectedStatus) return;
-
-            const updates: UpdateGoalParams = {
+            await this.goalManager.updateGoal(goalId, {
                 title: newTitle.trim(),
-                description: newDescription?.trim() || undefined,
-                status: selectedStatus.label as GoalStatusType
-            };
+                description: newDescription?.trim() ?? undefined
+            });
 
-            const updatedGoal = await this.goalManager.updateGoal(goalId, updates);
-            window.showInformationMessage(`Updated goal: "${updatedGoal.title}"`);
             this.treeProvider.refresh();
+            this.changeNotificationService.fire({ type: 'goal:updated', data: { goalId }, timestamp: new Date() });
+            
+            vscode.window.showInformationMessage(`Goal updated: ${newTitle}`);
+            this.logger.info('Goal edited successfully', { goalId, newTitle });
 
         } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-            window.showErrorMessage(`Failed to edit goal: ${errorMessage}`);
+            this.logger.error('Failed to edit goal', error);
+            vscode.window.showErrorMessage(`Failed to edit goal: ${error}`);
         }
     }
 
-    public async deleteGoal(goalId: string): Promise<void> {
+    /**
+     * Delete a goal
+     */
+    async deleteGoal(goalId?: string): Promise<void> {
         try {
-            const goal = this.goalManager.getGoal(goalId);
+            if (!goalId) {
+                goalId = await this.getSelectedGoalId();
+                if (!goalId) {
+                    return;
+                }
+            }
+
+            const goal = this.stateManager.getGoal(goalId);
             if (!goal) {
-                window.showErrorMessage(`Goal with ID ${goalId} not found`);
+                vscode.window.showErrorMessage('Goal not found');
                 return;
             }
 
             // Check for child goals
-            const childGoals = this.goalManager.getChildGoals(goalId);
-            const hasChildren = childGoals.length > 0;
-
-            let confirmMessage = `Delete goal "${goal.title}"?`;
-            if (hasChildren) {
-                confirmMessage += `\n\nThis will also delete ${childGoals.length} child goal(s).`;
+            const childGoals = this.stateManager.getChildGoals(goalId);
+            let confirmationMessage = `Are you sure you want to delete goal "${goal.title}"?`;
+            
+            if (childGoals.length > 0) {
+                confirmationMessage += `\n\nThis will also delete ${childGoals.length} child goal(s) and all their tasks.`;
+            }
+            
+            if (goal.tasks.length > 0) {
+                confirmationMessage += `\n\nThis will also delete ${goal.tasks.length} task(s).`;
             }
 
-            const deleteItem: MessageItem = { title: 'Delete' };
-            const cancelItem: MessageItem = { title: 'Cancel', isCloseAffordance: true };
-            
-            const confirmation = await window.showWarningMessage(
-                confirmMessage,
-                deleteItem,
-                cancelItem
+            const confirmation = await vscode.window.showWarningMessage(
+                confirmationMessage,
+                { modal: true },
+                'Delete'
             );
 
-            if (confirmation !== deleteItem) return;
+            if (confirmation !== 'Delete') {
+                return;
+            }
 
             await this.goalManager.deleteGoal(goalId);
-            window.showInformationMessage(`Deleted goal: "${goal.title}"`);
+
             this.treeProvider.refresh();
-
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-            window.showErrorMessage(`Failed to delete goal: ${errorMessage}`);
-        }
-    }
-
-    // ===========================================
-    // Task Commands
-    // ===========================================
-
-    public async addTask(goalId: string): Promise<void> {
-        try {
-            const goal = this.goalManager.getGoal(goalId);
-            if (!goal) {
-                window.showErrorMessage(`Goal with ID ${goalId} not found`);
-                return;
-            }
-
-            const title = await window.showInputBox({
-                title: `Add Task to: ${goal.title}`,
-                placeHolder: 'Enter task title',
-                prompt: 'What task needs to be completed?'
-            });
-
-            if (!title) return;
-
-            const description = await window.showInputBox({
-                title: 'Task Description (Optional)',
-                placeHolder: 'Enter task details',
-                prompt: 'Provide more details about this task'
-            });
-
-            const params: CreateTaskParams = {
-                title: title.trim(),
-                description: description?.trim() || undefined
-            };
-
-            const newTask = await this.goalManager.addTask(goalId, params);
-            window.showInformationMessage(`Added task: "${newTask.title}" to "${goal.title}"`);
-            this.treeProvider.refresh();
-
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-            window.showErrorMessage(`Failed to add task: ${errorMessage}`);
-        }
-    }
-
-    public async editTask(goalId: string, taskId: string): Promise<void> {
-        try {
-            const goal = this.goalManager.getGoal(goalId);
-            if (!goal) {
-                window.showErrorMessage(`Goal with ID ${goalId} not found`);
-                return;
-            }
-
-            const task = goal.tasks.find(t => t.id === taskId);
-            if (!task) {
-                window.showErrorMessage(`Task with ID ${taskId} not found`);
-                return;
-            }
-
-            const newTitle = await window.showInputBox({
-                title: 'Edit Task Title',
-                value: task.title,
-                placeHolder: 'Enter task title'
-            });
-
-            if (newTitle === undefined) return;
-
-            const newDescription = await window.showInputBox({
-                title: 'Edit Task Description',
-                value: task.description || '',
-                placeHolder: 'Enter task description (optional)'
-            });
-
-            if (newDescription === undefined) return;
-
-            const updates: UpdateTaskParams = {
-                title: newTitle.trim(),
-                description: newDescription?.trim() || undefined
-            };
-
-            const updatedTask = await this.goalManager.updateTask(goalId, taskId, updates);
-            window.showInformationMessage(`Updated task: "${updatedTask.title}"`);
-            this.treeProvider.refresh();
-
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-            window.showErrorMessage(`Failed to edit task: ${errorMessage}`);
-        }
-    }
-
-    public async toggleTaskStatus(goalId: string, taskId: string): Promise<void> {
-        try {
-            const goal = this.goalManager.getGoal(goalId);
-            if (!goal) {
-                window.showErrorMessage(`Goal with ID ${goalId} not found`);
-                return;
-            }
-
-            const task = goal.tasks.find(t => t.id === taskId);
-            if (!task) {
-                window.showErrorMessage(`Task with ID ${taskId} not found`);
-                return;
-            }
-
-            const newStatus = task.status === TaskStatus.DONE ? TaskStatus.TODO : TaskStatus.DONE;
+            this.changeNotificationService.fire({ type: 'goal:deleted', data: { goalId }, timestamp: new Date() });
             
-            const updates: UpdateTaskParams = {
-                status: newStatus
-            };
-
-            const updatedTask = await this.goalManager.updateTask(goalId, taskId, updates);
-            const statusText = newStatus === TaskStatus.DONE ? 'completed' : 'reopened';
-            window.showInformationMessage(`Task "${updatedTask.title}" ${statusText}`);
-            this.treeProvider.refresh();
+            vscode.window.showInformationMessage('Goal deleted successfully');
+            this.logger.info('Goal deleted successfully', { goalId });
 
         } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-            window.showErrorMessage(`Failed to toggle task status: ${errorMessage}`);
+            this.logger.error('Failed to delete goal', error);
+            vscode.window.showErrorMessage(`Failed to delete goal: ${error}`);
         }
     }
 
-    public async deleteTask(goalId: string, taskId: string): Promise<void> {
+    // View Management Commands
+
+    /**
+     * Refresh the tree view
+     */
+    async refreshView(): Promise<void> {
         try {
-            const goal = this.goalManager.getGoal(goalId);
-            if (!goal) {
-                window.showErrorMessage(`Goal with ID ${goalId} not found`);
-                return;
-            }
-
-            const task = goal.tasks.find(t => t.id === taskId);
-            if (!task) {
-                window.showErrorMessage(`Task with ID ${taskId} not found`);
-                return;
-            }
-
-            const deleteItem: MessageItem = { title: 'Delete' };
-            const cancelItem: MessageItem = { title: 'Cancel', isCloseAffordance: true };
-            
-            const confirmation = await window.showWarningMessage(
-                `Delete task "${task.title}"?`,
-                deleteItem,
-                cancelItem
-            );
-
-            if (confirmation !== deleteItem) return;
-
-            await this.goalManager.deleteTask(goalId, taskId);
-            window.showInformationMessage(`Deleted task: "${task.title}"`);
             this.treeProvider.refresh();
-
+            vscode.window.showInformationMessage('Goal Tree refreshed');
+            this.logger.info('Tree view refreshed manually');
         } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-            window.showErrorMessage(`Failed to delete task: ${errorMessage}`);
+            this.logger.error('Failed to refresh tree view', error);
+            vscode.window.showErrorMessage(`Failed to refresh tree view: ${error}`);
         }
     }
 
-    // ===========================================
-    // Utility Commands
-    // ===========================================
-
-    public async refreshTree(): Promise<void> {
-        this.treeProvider.refresh();
-        window.showInformationMessage('Goal tree refreshed');
-    }
-
-    public async checkCircularDependencies(): Promise<void> {
+    /**
+     * Open the goal tree view
+     */
+    async openView(): Promise<void> {
         try {
-            if (this.dependencyResolver) {
-                const circularDeps = await this.dependencyResolver.detectCircularDependencies();
-                if (circularDeps.length > 0) {
-                    window.showWarningMessage(`Found ${circularDeps.length} circular dependencies. Check the output for details.`);
-                } else {
-                    window.showInformationMessage('No circular dependencies found');
-                }
-            } else {
-                // Basic circular dependency check using GoalManager
-                window.showInformationMessage('Advanced circular dependency detection requires the DependencyResolver service');
-            }
+            await vscode.commands.executeCommand('workbench.view.extension.goalTreeContainer');
+            vscode.window.showInformationMessage('Goal Tree view opened');
+            this.logger.info('Goal tree view opened');
         } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-            window.showErrorMessage(`Failed to check circular dependencies: ${errorMessage}`);
+            this.logger.error('Failed to open tree view', error);
+            vscode.window.showErrorMessage(`Failed to open tree view: ${error}`);
         }
     }
 
-    // ===========================================
-    // Helper Methods
-    // ===========================================
+    /**
+     * Expand all tree nodes
+     */
+    async expandAll(): Promise<void> {
+        try {
+            await vscode.commands.executeCommand('goalTreeView.expandAll');
+            this.logger.info('All tree nodes expanded');
+        } catch (error) {
+            this.logger.error('Failed to expand all nodes', error);
+        }
+    }
 
-    private async selectGoalFromList(
-        title: string, 
-        filter?: (goal: Goal) => boolean, 
-        allowNone: boolean = false
-    ): Promise<Goal | null> {
-        let goals = this.goalManager.getAllGoals();
+    /**
+     * Collapse all tree nodes
+     */
+    async collapseAll(): Promise<void> {
+        try {
+            await vscode.commands.executeCommand('goalTreeView.collapseAll');
+            this.logger.info('All tree nodes collapsed');
+        } catch (error) {
+            this.logger.error('Failed to collapse all nodes', error);
+        }
+    }
+
+    // Configuration Commands
+
+    /**
+     * Toggle showing completed items
+     */
+    async toggleShowCompleted(): Promise<void> {
+        const config = vscode.workspace.getConfiguration('goalTree');
+        const currentValue = config.get('showCompleted', true);
+        await config.update('showCompleted', !currentValue, vscode.ConfigurationTarget.Workspace);
         
-        if (filter) {
-            goals = goals.filter(filter);
+        const message = !currentValue ? 'Now showing completed items' : 'Now hiding completed items';
+        vscode.window.showInformationMessage(message);
+        this.logger.info('Show completed toggled', { newValue: !currentValue });
+    }
+
+    /**
+     * Toggle sorting by title
+     */
+    async toggleSortByTitle(): Promise<void> {
+        const config = vscode.workspace.getConfiguration('goalTree');
+        const currentValue = config.get('sortByTitle', false);
+        await config.update('sortByTitle', !currentValue, vscode.ConfigurationTarget.Workspace);
+        
+        const message = !currentValue ? 'Now sorting by title' : 'Now sorting by creation date';
+        vscode.window.showInformationMessage(message);
+        this.logger.info('Sort by title toggled', { newValue: !currentValue });
+    }
+
+    /**
+     * Toggle grouping by status
+     */
+    async toggleGroupByStatus(): Promise<void> {
+        const config = vscode.workspace.getConfiguration('goalTree');
+        const currentValue = config.get('groupByStatus', false);
+        await config.update('groupByStatus', !currentValue, vscode.ConfigurationTarget.Workspace);
+        
+        const message = !currentValue ? 'Now grouping by status' : 'No longer grouping by status';
+        vscode.window.showInformationMessage(message);
+        this.logger.info('Group by status toggled', { newValue: !currentValue });
+    }
+
+    // Search and Filter Commands
+
+    /**
+     * Search for goals
+     */
+    async searchGoals(): Promise<void> {
+        const searchTerm = await vscode.window.showInputBox({
+            prompt: 'Search goals by title or description',
+            placeHolder: 'Enter search term...'
+        });
+
+        if (!searchTerm) {
+            return;
         }
 
-        if (goals.length === 0 && !allowNone) {
-            window.showInformationMessage('No goals available for selection');
-            return null;
+        // TODO: Implement search functionality in tree provider
+        vscode.window.showInformationMessage('Search functionality coming soon!');
+        this.logger.info('Search requested', { searchTerm });
+    }
+
+    /**
+     * Filter by status
+     */
+    async filterByStatus(): Promise<void> {
+        const statuses: Array<{ label: string; value: GoalStatus }> = [
+            { label: 'Planned', value: GoalStatus.PLANNED },
+            { label: 'In Progress', value: GoalStatus.IN_PROGRESS },
+            { label: 'Blocked', value: GoalStatus.BLOCKED },
+            { label: 'Completed', value: GoalStatus.COMPLETED }
+        ];
+
+        const selectedStatus = await vscode.window.showQuickPick(statuses, {
+            placeHolder: 'Select status to filter by'
+        });
+
+        if (!selectedStatus) {
+            return;
         }
 
-        const goalItems: GoalQuickPickItem[] = goals.map(goal => ({
+        // TODO: Implement status filtering in tree provider
+        vscode.window.showInformationMessage(`Filter by ${selectedStatus.label} coming soon!`);
+        this.logger.info('Status filter requested', { status: selectedStatus.value });
+    }
+
+    /**
+     * Show only blocked goals
+     */
+    async showOnlyBlocked(): Promise<void> {
+        // TODO: Implement blocked filter in tree provider
+        vscode.window.showInformationMessage('Show only blocked goals coming soon!');
+        this.logger.info('Blocked filter requested');
+    }
+
+    /**
+     * Show only high priority goals
+     */
+    async showOnlyHighPriority(): Promise<void> {
+        // TODO: Implement priority filter in tree provider
+        vscode.window.showInformationMessage('Show only high priority goals coming soon!');
+        this.logger.info('High priority filter requested');
+    }
+
+    // Helper Methods
+
+    /**
+     * Get the currently selected goal ID from tree selection or prompt user
+     */
+    private async getSelectedGoalId(): Promise<string | undefined> {
+        // TODO: Get from tree view selection
+        // For now, let user pick from available goals
+        const goals = this.stateManager.getAllGoals();
+        if (goals.length === 0) {
+            vscode.window.showInformationMessage('No goals available. Create a goal first.');
+            return undefined;
+        }
+
+        const goalItems = goals.map(goal => ({
             label: goal.title,
-            description: `Status: ${goal.status}`,
-            detail: goal.description,
-            goalId: goal.id,
-            goal
+            description: goal.status,
+            detail: goal.description ?? undefined,
+            goalId: goal.id
         }));
 
-        if (allowNone) {
-            goalItems.unshift({
-                label: '$(remove) None',
-                description: 'No parent goal',
-                goalId: '',
-                goal: {} as Goal
-            });
-        }
-
-        const selected = await window.showQuickPick(goalItems, {
-            title,
+        const selectedItem = await vscode.window.showQuickPick(goalItems, {
             placeHolder: 'Select a goal'
         });
 
-        if (!selected) return null;
-        if (allowNone && selected.goalId === '') return null;
-        
-        return selected.goal;
+        return selectedItem?.goalId;
     }
 
-    private async buildDependencyChainVisualization(goalId: string): Promise<DependencyChainItem[]> {
-        const chain: DependencyChainItem[] = [];
-        const visited = new Set<string>();
-        
-        const buildChain = (currentGoalId: string, level: number, isDirect: boolean) => {
-            if (visited.has(currentGoalId)) return;
-            visited.add(currentGoalId);
-            
-            const goal = this.goalManager.getGoal(currentGoalId);
-            if (!goal) return;
-            
-            // Add blocking goals
-            for (const blockerId of goal.blockedByIds) {
-                const blocker = this.goalManager.getGoal(blockerId);
-                if (blocker) {
-                    chain.push({
-                        goalId: blocker.id,
-                        title: blocker.title,
-                        status: blocker.status,
-                        level,
-                        isDirectDependency: isDirect && level === 0
-                    });
-                    
-                    // Recursively add dependencies of blockers
-                    buildChain(blocker.id, level + 1, false);
+    /**
+     * Get the currently selected task ID from tree selection or prompt user
+     */
+    private async getSelectedTaskId(): Promise<{ goalId: string; taskId: string } | undefined> {
+        // TODO: Get from tree view selection
+        // For now, let user pick from available tasks
+        const goals = this.stateManager.getAllGoals();
+        const tasksWithGoals: Array<{ label: string; description: string; goalId: string; taskId: string }> = [];
+
+        goals.forEach(goal => {
+            goal.tasks.forEach(task => {
+                tasksWithGoals.push({
+                    label: task.title,
+                    description: `${goal.title} - ${task.status}`,
+                    goalId: goal.id,
+                    taskId: task.id
+                });
+            });
+        });
+
+        if (tasksWithGoals.length === 0) {
+            vscode.window.showInformationMessage('No tasks available. Create a task first.');
+            return undefined;
+        }
+
+        const selectedItem = await vscode.window.showQuickPick(tasksWithGoals, {
+            placeHolder: 'Select a task'
+        });
+
+        if (!selectedItem) {
+            return undefined;
+        }
+
+        return {
+            goalId: selectedItem.goalId,
+            taskId: selectedItem.taskId
+        };
+    }
+
+    // Dependency Management Commands
+
+    /**
+     * Add a dependency to a goal
+     */
+    async addDependency(goalId?: string): Promise<void> {
+        try {
+            if (!goalId) {
+                goalId = await this.getSelectedGoalId();
+                if (!goalId) {
+                    return;
                 }
             }
-        };
-        
-        buildChain(goalId, 0, true);
-        
-        // Sort by level to show hierarchy
-        return chain.sort((a, b) => a.level - b.level);
-    }
 
-    private getStatusIcon(status: GoalStatusType): string {
-        switch (status) {
-            case GoalStatus.COMPLETED:
-                return '✅';
-            case GoalStatus.IN_PROGRESS:
-                return '▶️';
-            case GoalStatus.PAUSED:
-                return '⏸️';
-            case GoalStatus.CANCELLED:
-                return '❌';
-            case GoalStatus.BLOCKED:
-                return '🚫';
-            case GoalStatus.PLANNED:
-            default:
-                return '⚪';
+            const goal = this.stateManager.getGoal(goalId);
+            if (!goal) {
+                vscode.window.showErrorMessage('Goal not found');
+                return;
+            }
+
+            // Get all goals except the current one and its children
+            const allGoals = this.stateManager.getAllGoals();
+            const availableGoals = allGoals.filter(g => 
+                g.id !== goalId && 
+                !goal.blockedByIds.includes(g.id) &&
+                !this.isDescendant(goalId!, g.id)
+            );
+
+            if (availableGoals.length === 0) {
+                vscode.window.showInformationMessage('No available goals to add as dependency');
+                return;
+            }
+
+            const goalItems = availableGoals.map(g => ({
+                label: g.title,
+                description: g.status,
+                detail: g.description ?? undefined,
+                goalId: g.id
+            }));
+
+            const selectedItem = await vscode.window.showQuickPick(goalItems, {
+                placeHolder: 'Select goal to add as dependency'
+            });
+
+            if (!selectedItem?.goalId) {
+                vscode.window.showErrorMessage('Invalid dependency selection');
+                return;
+            }
+
+            await this.goalManager.addBlockingDependency(goalId, selectedItem.goalId);
+
+            this.treeProvider.refresh();
+            this.changeNotificationService.fire({ type: 'goal:updated', data: { goalId }, timestamp: new Date() });
+            
+            vscode.window.showInformationMessage(`Dependency added: ${selectedItem.label}`);
+            this.logger.info('Dependency added', { goalId, dependencyId: selectedItem.goalId });
+
+        } catch (error) {
+            this.logger.error('Failed to add dependency', error);
+            vscode.window.showErrorMessage(`Failed to add dependency: ${error}`);
         }
     }
 
+    /**
+     * Remove a dependency from a goal
+     */
+    async removeDependency(goalId?: string): Promise<void> {
+        try {
+            if (!goalId) {
+                goalId = await this.getSelectedGoalId();
+                if (!goalId) {
+                    return;
+                }
+            }
+
+            const goal = this.stateManager.getGoal(goalId);
+            if (!goal) {
+                vscode.window.showErrorMessage('Goal not found');
+                return;
+            }
+
+            if (goal.blockedByIds.length === 0) {
+                vscode.window.showInformationMessage('Goal has no dependencies to remove');
+                return;
+            }
+
+            const dependencyItems = goal.blockedByIds.map(depId => {
+                const depGoal = this.stateManager.getGoal(depId);
+                return {
+                    label: depGoal?.title ?? depId,
+                    description: depGoal?.status ?? 'Unknown',
+                    dependencyId: depId
+                };
+            });
+
+            const selectedItem = await vscode.window.showQuickPick(dependencyItems, {
+                placeHolder: 'Select dependency to remove'
+            });
+
+            if (!selectedItem?.dependencyId) {
+                vscode.window.showErrorMessage('Invalid dependency selection');
+                return;
+            }
+
+            await this.goalManager.removeBlockingDependency(goalId, selectedItem.dependencyId);
+
+            this.treeProvider.refresh();
+            this.changeNotificationService.fire({ type: 'goal:updated', data: { goalId }, timestamp: new Date() });
+            
+            vscode.window.showInformationMessage(`Dependency removed: ${selectedItem.label}`);
+            this.logger.info('Dependency removed', { goalId, dependencyId: selectedItem.dependencyId });
+
+        } catch (error) {
+            this.logger.error('Failed to remove dependency', error);
+            vscode.window.showErrorMessage(`Failed to remove dependency: ${error}`);
+        }
+    }
+
+    /**
+     * Show dependencies for a goal
+     */
+    async showDependencies(goalId?: string): Promise<void> {
+        try {
+            if (!goalId) {
+                goalId = await this.getSelectedGoalId();
+                if (!goalId) {
+                    return;
+                }
+            }
+
+            const goal = this.stateManager.getGoal(goalId);
+            if (!goal) {
+                vscode.window.showErrorMessage('Goal not found');
+                return;
+            }
+
+            if (goal.blockedByIds.length === 0) {
+                vscode.window.showInformationMessage(`Goal "${goal.title}" has no dependencies`);
+                return;
+            }
+
+            const dependencies = goal.blockedByIds.map(depId => {
+                const depGoal = this.stateManager.getGoal(depId);
+                return depGoal ? `• ${depGoal.title} (${depGoal.status})` : `• ${depId} (not found)`;
+            });
+
+            const message = `Dependencies for "${goal.title}":\n\n${dependencies.join('\n')}`;
+            vscode.window.showInformationMessage(message);
+            
+            this.logger.info('Dependencies shown', { goalId, dependencyCount: goal.blockedByIds.length });
+
+        } catch (error) {
+            this.logger.error('Failed to show dependencies', error);
+            vscode.window.showErrorMessage(`Failed to show dependencies: ${error}`);
+        }
+    }
+
+    // Navigation Commands (placeholders for future implementation)
+
+    /**
+     * Navigate to parent goal
+     */
+    async goToParent(): Promise<void> {
+        // TODO: Implement navigation to parent
+        vscode.window.showInformationMessage('Navigation to parent coming soon!');
+    }
+
+    /**
+     * Navigate to first child goal
+     */
+    async goToFirstChild(): Promise<void> {
+        // TODO: Implement navigation to first child
+        vscode.window.showInformationMessage('Navigation to first child coming soon!');
+    }
+
+    /**
+     * Focus next goal
+     */
+    async focusNextGoal(): Promise<void> {
+        // TODO: Implement focus next goal
+        vscode.window.showInformationMessage('Focus next goal coming soon!');
+    }
+
+    /**
+     * Focus previous goal
+     */
+    async focusPreviousGoal(): Promise<void> {
+        // TODO: Implement focus previous goal
+        vscode.window.showInformationMessage('Focus previous goal coming soon!');
+        this.logger.info('Focus previous goal requested');
+    }
+
+    // Enhanced Commands
+
+    /**
+     * Focus on a specific goal (zoom into goal view)
+     */
+    async focusGoal(goalId?: string): Promise<void> {
+        try {
+            if (!goalId) {
+                goalId = await this.getSelectedGoalId();
+                if (!goalId) {
+                    return;
+                }
+            }
+
+            const goal = this.stateManager.getGoal(goalId);
+            if (!goal) {
+                vscode.window.showErrorMessage('Goal not found');
+                return;
+            }
+
+            // TODO: Implement focused view functionality
+            vscode.window.showInformationMessage(`Focus view for "${goal.title}" coming soon!`);
+            this.logger.info('Goal focus requested', { goalId, title: goal.title });
+
+        } catch (error) {
+            this.logger.error('Failed to focus on goal', error);
+            vscode.window.showErrorMessage(`Failed to focus on goal: ${error}`);
+        }
+    }
+
+    /**
+     * Export a single goal to JSON
+     */
+    async exportGoal(goalId?: string): Promise<void> {
+        try {
+            if (!goalId) {
+                goalId = await this.getSelectedGoalId();
+                if (!goalId) {
+                    return;
+                }
+            }
+
+            const goal = this.stateManager.getGoal(goalId);
+            if (!goal) {
+                vscode.window.showErrorMessage('Goal not found');
+                return;
+            }
+
+            // Get child goals recursively
+            const childGoals = this.getGoalHierarchy(goalId);
+            const exportData = {
+                goal,
+                childGoals,
+                exportDate: new Date().toISOString(),
+                version: '1.0'
+            };
+
+            const fileName = `goal-${goal.title.replace(/[^a-zA-Z0-9]/g, '-')}-${new Date().toISOString().split('T')[0]}.json`;
+            
+            const saveUri = await vscode.window.showSaveDialog({
+                defaultUri: vscode.Uri.file(fileName),
+                filters: {
+                    'JSON Files': ['json'],
+                    'All Files': ['*']
+                }
+            });
+
+            if (saveUri) {
+                const content = JSON.stringify(exportData, null, 2);
+                await vscode.workspace.fs.writeFile(saveUri, Buffer.from(content, 'utf8'));
+                
+                vscode.window.showInformationMessage(`Goal exported to ${saveUri.fsPath}`);
+                this.logger.info('Goal exported successfully', { goalId, fileName: saveUri.fsPath });
+            }
+
+        } catch (error) {
+            this.logger.error('Failed to export goal', error);
+            vscode.window.showErrorMessage(`Failed to export goal: ${error}`);
+        }
+    }
+
+    /**
+     * Import goals from JSON file
+     */
+    async importGoals(): Promise<void> {
+        try {
+            const fileUri = await vscode.window.showOpenDialog({
+                canSelectFiles: true,
+                canSelectFolders: false,
+                canSelectMany: false,
+                filters: {
+                    'JSON Files': ['json'],
+                    'All Files': ['*']
+                }
+            });
+
+            if (!fileUri || fileUri.length === 0) {
+                return; // User cancelled
+            }
+
+            const content = await vscode.workspace.fs.readFile(fileUri[0]);
+            const importData = JSON.parse(content.toString());
+
+            // Validate import data structure
+            if (!importData.goal && !importData.goals) {
+                throw new Error('Invalid import file format: missing goal data');
+            }
+
+            const goalsToImport = importData.goals || [importData.goal];
+            let importedCount = 0;
+
+            for (const goalData of goalsToImport) {
+                if (goalData && typeof goalData === 'object' && goalData.title) {
+                    try {
+                        await this.goalManager.createGoal({
+                            title: goalData.title,
+                            description: goalData.description,
+                            parentId: goalData.parentId
+                        });
+                        importedCount++;
+                    } catch (error) {
+                        this.logger.warn('Failed to import goal', { title: goalData.title, error });
+                    }
+                }
+            }
+
+            this.treeProvider.refresh();
+            
+            if (importedCount > 0) {
+                vscode.window.showInformationMessage(`Successfully imported ${importedCount} goal(s)`);
+                this.logger.info('Goals imported successfully', { count: importedCount });
+            } else {
+                vscode.window.showWarningMessage('No goals were imported');
+            }
+
+        } catch (error) {
+            this.logger.error('Failed to import goals', error);
+            vscode.window.showErrorMessage(`Failed to import goals: ${error}`);
+        }
+    }
+
+    /**
+     * Export all goals to JSON
+     */
+    async exportAll(): Promise<void> {
+        try {
+            const allGoals = this.stateManager.getAllGoals();
+            
+            if (allGoals.length === 0) {
+                vscode.window.showInformationMessage('No goals to export');
+                return;
+            }
+
+            const exportData = {
+                goals: allGoals,
+                exportDate: new Date().toISOString(),
+                version: '1.0',
+                goalCount: allGoals.length
+            };
+
+            const fileName = `all-goals-${new Date().toISOString().split('T')[0]}.json`;
+            
+            const saveUri = await vscode.window.showSaveDialog({
+                defaultUri: vscode.Uri.file(fileName),
+                filters: {
+                    'JSON Files': ['json'],
+                    'All Files': ['*']
+                }
+            });
+
+            if (saveUri) {
+                const content = JSON.stringify(exportData, null, 2);
+                await vscode.workspace.fs.writeFile(saveUri, Buffer.from(content, 'utf8'));
+                
+                vscode.window.showInformationMessage(`Exported ${allGoals.length} goals to ${saveUri.fsPath}`);
+                this.logger.info('All goals exported successfully', { goalCount: allGoals.length, fileName: saveUri.fsPath });
+            }
+
+        } catch (error) {
+            this.logger.error('Failed to export all goals', error);
+            vscode.window.showErrorMessage(`Failed to export all goals: ${error}`);
+        }
+    }
+
+    /**
+     * Get goal hierarchy (goal with all its descendants)
+     */
+    private getGoalHierarchy(goalId: string): Goal[] {
+        const childGoals: Goal[] = [];
+        const directChildren = this.stateManager.getChildGoals(goalId);
+        
+        for (const child of directChildren) {
+            childGoals.push(child);
+            // Recursively get descendants
+            const descendants = this.getGoalHierarchy(child.id);
+            childGoals.push(...descendants);
+        }
+        
+        return childGoals;
+    }
+
+    /**
+     * Check if one goal is a descendant of another
+     */
+    private isDescendant(ancestorId: string, descendantId: string): boolean {
+        const descendant = this.stateManager.getGoal(descendantId);
+        if (!descendant?.parentId) {
+            return false;
+        }
+        
+        if (descendant.parentId === ancestorId) {
+            return true;
+        }
+        
+        return this.isDescendant(ancestorId, descendant.parentId);
+    }
+
     // ===========================================
-    // Command Registration Helper
+    // Undo/Redo Command Implementations
     // ===========================================
 
-    public static registerCommands(
-        goalManager: GoalManager,
-        treeProvider: GoalTreeProvider
-    ): TreeCommands {
-        const commandHandler = new TreeCommands(goalManager, treeProvider);
+    /**
+     * Undo the last operation
+     */
+    async undo(): Promise<void> {
+        try {
+            if (!this.undoRedoService) {
+                vscode.window.showWarningMessage('Undo/Redo service is not available');
+                return;
+            }
 
-        // Register all commands
-        const commandMappings = [
-            ['goalTree.selectGoal', (goalId: string) => commandHandler.selectGoal(goalId)],
-            ['goalTree.selectTask', (goalId: string, taskId: string) => commandHandler.selectTask(goalId, taskId)],
-            ['goalTree.createGoal', () => commandHandler.createGoal()],
-            ['goalTree.addDependency', (goalId?: string) => commandHandler.addDependency(goalId)],
-            ['goalTree.removeDependency', (goalId?: string) => commandHandler.removeDependency(goalId)],
-            ['goalTree.showDependencies', (goalId: string) => commandHandler.showDependencies(goalId)],
-            ['goalTree.manageDependencies', (goalId: string) => commandHandler.manageDependencies(goalId)],
-            ['goalTree.editGoal', (goalId: string) => commandHandler.editGoal(goalId)],
-            ['goalTree.deleteGoal', (goalId: string) => commandHandler.deleteGoal(goalId)],
-            ['goalTree.addTask', (goalId: string) => commandHandler.addTask(goalId)],
-            ['goalTree.refreshTree', () => commandHandler.refreshTree()],
-            ['goalTree.checkCircularDependencies', () => commandHandler.checkCircularDependencies()]
-        ];
+            if (!this.undoRedoService.canUndo()) {
+                vscode.window.showInformationMessage('Nothing to undo');
+                return;
+            }
 
-        commandMappings.forEach(([commandId, handler]) => {
-            commands.registerCommand(commandId as string, handler);
-        });
+            const undoDescription = this.undoRedoService.getUndoDescription();
+            const result = await this.undoRedoService.undo();
 
-        return commandHandler;
+            if (result.success) {
+                this.treeProvider.refresh();
+                const message = undoDescription ? `Undone: ${undoDescription}` : 'Operation undone';
+                vscode.window.showInformationMessage(message);
+                this.logger.info('Undo completed successfully', { 
+                    commandsProcessed: result.commandsProcessed,
+                    description: undoDescription 
+                });
+            } else {
+                vscode.window.showErrorMessage(`Undo failed: ${result.error}`);
+                this.logger.error('Undo operation failed', { error: result.error });
+            }
+
+        } catch (error) {
+            this.logger.error('Failed to undo operation', error);
+            vscode.window.showErrorMessage(`Undo failed: ${error}`);
+        }
+    }
+
+    /**
+     * Redo the last undone operation
+     */
+    async redo(): Promise<void> {
+        try {
+            if (!this.undoRedoService) {
+                vscode.window.showWarningMessage('Undo/Redo service is not available');
+                return;
+            }
+
+            if (!this.undoRedoService.canRedo()) {
+                vscode.window.showInformationMessage('Nothing to redo');
+                return;
+            }
+
+            const redoDescription = this.undoRedoService.getRedoDescription();
+            const result = await this.undoRedoService.redo();
+
+            if (result.success) {
+                this.treeProvider.refresh();
+                const message = redoDescription ? `Redone: ${redoDescription}` : 'Operation redone';
+                vscode.window.showInformationMessage(message);
+                this.logger.info('Redo completed successfully', { 
+                    commandsProcessed: result.commandsProcessed,
+                    description: redoDescription 
+                });
+            } else {
+                vscode.window.showErrorMessage(`Redo failed: ${result.error}`);
+                this.logger.error('Redo operation failed', { error: result.error });
+            }
+
+        } catch (error) {
+            this.logger.error('Failed to redo operation', error);
+            vscode.window.showErrorMessage(`Redo failed: ${error}`);
+        }
+    }
+
+    /**
+     * Show undo/redo history
+     */
+    async showUndoHistory(): Promise<void> {
+        try {
+            if (!this.undoRedoService) {
+                vscode.window.showWarningMessage('Undo/Redo service is not available');
+                return;
+            }
+
+            const undoRedoManager = this.undoRedoService.getUndoRedoManager();
+            const history = undoRedoManager.getCommandHistory();
+            const stats = undoRedoManager.getUndoRedoStats();
+
+            if (history.length === 0) {
+                vscode.window.showInformationMessage('No undo/redo history available');
+                return;
+            }
+
+            // Create quick pick items for history
+            const items = history.map((entry, index) => {
+                const isGroup = undoRedoManager['isCommandGroup'](entry.item);
+                const icon = entry.stack === 'undo' ? '$(arrow-left)' : '$(arrow-right)';
+                const stackLabel = entry.stack === 'undo' ? 'Can Undo' : 'Can Redo';
+                
+                let detail = '';
+                if (isGroup) {
+                    const group = entry.item as any;
+                    detail = `${group.commands.length} operations • ${group.timestamp.toLocaleString()}`;
+                } else {
+                    const command = entry.item as any;
+                    detail = `Single operation • ${command.timestamp.toLocaleString()}`;
+                }
+
+                return {
+                    label: `${icon} ${entry.item.description}`,
+                    description: stackLabel,
+                    detail,
+                    stack: entry.stack,
+                    index
+                };
+            });
+
+            // Add stats header
+            const statsItem = {
+                label: `$(info) History Statistics`,
+                description: `${stats.undoableCommands} undoable, ${stats.redoableCommands} redoable`,
+                detail: `Total: ${stats.totalCommands} operations, ${stats.snapshots} snapshots`,
+                stack: 'info' as const,
+                index: -1
+            };
+
+            const allItems = [statsItem, ...items];
+
+            const selected = await vscode.window.showQuickPick(allItems, {
+                placeHolder: 'Select an operation to jump to (or view history)',
+                matchOnDescription: true,
+                matchOnDetail: true
+            });
+
+            if (selected && selected.stack !== 'info') {
+                // For now, just show info. In future could implement "jump to" functionality
+                vscode.window.showInformationMessage(`Selected: ${selected.label.replace(/\$\(.*?\)\s/, '')}`);
+            }
+
+        } catch (error) {
+            this.logger.error('Failed to show undo history', error);
+            vscode.window.showErrorMessage(`Failed to show undo history: ${error}`);
+        }
+    }
+
+    /**
+     * Clear all undo/redo history
+     */
+    async clearUndoHistory(): Promise<void> {
+        try {
+            if (!this.undoRedoService) {
+                vscode.window.showWarningMessage('Undo/Redo service is not available');
+                return;
+            }
+
+            const stats = this.undoRedoService.getStats();
+            
+            if (stats.totalCommands === 0) {
+                vscode.window.showInformationMessage('No undo/redo history to clear');
+                return;
+            }
+
+            const confirmation = await vscode.window.showWarningMessage(
+                `Are you sure you want to clear all undo/redo history? This will remove ${stats.totalCommands} operations and ${stats.snapshots} snapshots.`,
+                { modal: true },
+                'Clear History'
+            );
+
+            if (confirmation === 'Clear History') {
+                this.undoRedoService.clearHistory();
+                vscode.window.showInformationMessage('Undo/redo history cleared');
+                this.logger.info('Undo/redo history cleared', { 
+                    operationsCleared: stats.totalCommands,
+                    snapshotsCleared: stats.snapshots 
+                });
+            }
+
+        } catch (error) {
+            this.logger.error('Failed to clear undo history', error);
+            vscode.window.showErrorMessage(`Failed to clear undo history: ${error}`);
+        }
+    }
+
+    /**
+     * Create a manual snapshot
+     */
+    async createSnapshot(): Promise<void> {
+        try {
+            if (!this.undoRedoService) {
+                vscode.window.showWarningMessage('Undo/Redo service is not available');
+                return;
+            }
+
+            const description = await vscode.window.showInputBox({
+                prompt: 'Enter a description for this snapshot',
+                placeHolder: 'e.g., Before major reorganization...',
+                validateInput: (value) => {
+                    if (!value.trim()) {
+                        return 'Snapshot description cannot be empty';
+                    }
+                    if (value.length > 100) {
+                        return 'Description must be 100 characters or less';
+                    }
+                    return null;
+                }
+            });
+
+            if (!description) {
+                return; // User cancelled
+            }
+
+            const snapshotId = await this.undoRedoService.createSnapshot(description.trim());
+            vscode.window.showInformationMessage(`Snapshot created: ${description}`);
+            this.logger.info('Manual snapshot created', { snapshotId, description });
+
+        } catch (error) {
+            this.logger.error('Failed to create snapshot', error);
+            vscode.window.showErrorMessage(`Failed to create snapshot: ${error}`);
+        }
+    }
+
+    /**
+     * Show available snapshots
+     */
+    async showSnapshots(): Promise<void> {
+        try {
+            if (!this.undoRedoService) {
+                vscode.window.showWarningMessage('Undo/Redo service is not available');
+                return;
+            }
+
+            const undoRedoManager = this.undoRedoService.getUndoRedoManager();
+            const snapshots = undoRedoManager.getSnapshots();
+
+            if (snapshots.length === 0) {
+                vscode.window.showInformationMessage('No snapshots available');
+                return;
+            }
+
+            const items = snapshots
+                .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()) // Most recent first
+                .map((snapshot, index) => ({
+                    label: `$(archive) ${snapshot.description}`,
+                    description: snapshot.timestamp.toLocaleString(),
+                    detail: `${snapshot.goalStates.size} goals captured`,
+                    snapshotId: snapshot.id,
+                    index
+                }));
+
+            const selected = await vscode.window.showQuickPick(items, {
+                placeHolder: 'View snapshots (rollback functionality coming soon)',
+                matchOnDescription: true,
+                matchOnDetail: true
+            });
+
+            if (selected) {
+                // For now, just show info. Future: implement rollback functionality
+                const snapshot = snapshots.find(s => s.id === selected.snapshotId);
+                if (snapshot) {
+                    const message = `Snapshot: ${snapshot.description}\nCreated: ${snapshot.timestamp.toLocaleString()}\nGoals captured: ${snapshot.goalStates.size}`;
+                    vscode.window.showInformationMessage(message);
+                }
+            }
+
+        } catch (error) {
+            this.logger.error('Failed to show snapshots', error);
+            vscode.window.showErrorMessage(`Failed to show snapshots: ${error}`);
+        }
     }
 }

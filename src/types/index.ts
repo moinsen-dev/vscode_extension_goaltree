@@ -3,8 +3,10 @@
  * This file re-exports all types for convenient importing
  */
 
-// Core fundamental types
+// Core fundamental types - NEW separated structure
 export * from './Goal';
+export * from './Task';
+export * from './GoalTree';
 export * from './GoalStatus';
 export * from './GoalEvents';
 
@@ -13,6 +15,9 @@ export * from './extension';
 
 // VS Code specific types
 export * from './vscode';
+
+// Tree view types
+export * from './TreeTypes';
 
 // Common utility types
 export * from './common';

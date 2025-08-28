@@ -1,12 +1,14 @@
 ---
-name: goal-tree
-status: backlog
-created: 2025-08-26T08:10:57Z
-updated: 2025-08-26T18:49:23Z
-last_sync: 2025-08-26T18:49:23Z
-progress: 0%
-prd: .claude/prds/goal-tree.md
+title: Epic: goal-tree
+github_url: https://github.com/moinsen-dev/vscode_extension_goaltree/issues/1
+github_number: 1
 github: https://github.com/moinsen-dev/vscode_extension_goaltree/issues/1
+status: open
+created: 2025-08-26T08:17:34Z
+updated: 2025-08-28T12:17:55Z
+last_sync: 2025-08-27T09:38:00Z
+assignees: []
+labels: []
 ---
 
 # Epic: goal-tree
@@ -193,17 +195,9 @@ interface Task {
 
 The implementation leverages VS Code's native patterns and APIs to create a performant, intuitive goal management system that integrates seamlessly with developer workflows while maintaining clear boundaries and avoiding scope creep.
 
-## Tasks Created
-- [ ] #2 - Extension Infrastructure Setup (parallel: true)
-- [ ] #3 - Data Models and Storage Service (parallel: true)
-- [ ] #4 - Goal Management System (parallel: true)
-- [ ] #5 - Dependency Management (parallel: true)
-- [ ] #6 - Tree View Implementation (parallel: false)
-- [ ] #7 - Task Management System (parallel: true)
-- [ ] #8 - UI Polish and Testing (parallel: false)
-- [ ] #9 - Command Integration (parallel: true)
+## Stats
 
-Total tasks:        8
-Parallel tasks:        6
-Sequential tasks: 2
+Total tasks: 8
+Parallel tasks: 6 (can be worked on simultaneously)
+Sequential tasks: 2 (have dependencies)
 Estimated total effort: 114-144 hours
