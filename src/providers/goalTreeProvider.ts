@@ -4,6 +4,8 @@ import { TreeViewConfig, TreeRefreshOptions, TREE_CONTEXT_VALUES } from '../type
 import { GoalTreeItem } from './GoalTreeItem';
 import { StateManager } from '../services/stateManager';
 import { GoalManager } from '../services/goalManager';
+import { TaskManager } from '../services/TaskManager';
+import { BulkTaskOperations } from '../services/BulkTaskOperations';
 import { ProgressCalculator, ProgressInfo } from '../utils/ProgressCalculator';
 import { ICONS, CONTEXT_VALUES, TREE_NODE_TYPES, DEFAULTS, ERROR_MESSAGES, CONFIG_KEYS } from '../constants';
 import { debounce, DebouncePresets, DebounceManager } from '../utils/debounce';
@@ -43,6 +45,8 @@ export class GoalTreeProvider implements vscode.TreeDataProvider<string> {
 
     private stateManager: StateManager;
     private goalManager: GoalManager;
+    private taskManager: TaskManager;
+    private bulkTaskOperations: BulkTaskOperations;
     private progressCalculator: ProgressCalculator;
     private showCompleted: boolean = true;
     private groupByStatus: boolean = false;
@@ -65,9 +69,17 @@ export class GoalTreeProvider implements vscode.TreeDataProvider<string> {
     private memoizedCreateTooltip!: ((goal: Goal, progress: any) => string) & { clearCache: () => void };
     private memoizedFilterGoals!: ((goals: Goal[]) => Goal[]) & { clearCache: () => void };
 
-    constructor(stateManager: StateManager, goalManager: GoalManager, context?: vscode.ExtensionContext) {
+    constructor(
+        stateManager: StateManager, 
+        goalManager: GoalManager, 
+        taskManager: TaskManager,
+        bulkTaskOperations: BulkTaskOperations,
+        context?: vscode.ExtensionContext
+    ) {
         this.stateManager = stateManager;
         this.goalManager = goalManager;
+        this.taskManager = taskManager;
+        this.bulkTaskOperations = bulkTaskOperations;
         this.progressCalculator = new ProgressCalculator();
         
         // Initialize performance components
@@ -101,6 +113,14 @@ export class GoalTreeProvider implements vscode.TreeDataProvider<string> {
         this.stateManager.on('stateChanged', () => {
             if (this.autoRefresh) {
                 this.logger.debug('State changed, triggering debounced refresh');
+                debouncedRefresh();
+            }
+        });
+        
+        // Listen for task events to refresh the tree
+        this.taskManager.onTaskEvent((event) => {
+            if (this.autoRefresh) {
+                this.logger.debug('Task event received, triggering debounced refresh', { eventType: event.type });
                 debouncedRefresh();
             }
         });
@@ -564,7 +584,7 @@ export class GoalTreeProvider implements vscode.TreeDataProvider<string> {
     }
 
     /**
-     * Create enhanced tooltip for a task
+     * Create enhanced tooltip for a task with progress indicators
      */
     private createTaskTooltip(task: Task): string {
         const lines = [
@@ -574,15 +594,41 @@ export class GoalTreeProvider implements vscode.TreeDataProvider<string> {
             `Created: ${task.createdAt.toLocaleDateString()}`
         ];
 
+        // Add time tracking and progress information
         if (task.completedAt) {
             const timeTaken = task.completedAt.getTime() - task.createdAt.getTime();
             const daysTaken = Math.floor(timeTaken / (24 * 60 * 60 * 1000));
-            const timeText = daysTaken > 0 ? `${daysTaken} days` : 'Same day';
+            const hoursTaken = Math.floor((timeTaken % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+            let timeText: string;
+            
+            if (daysTaken > 0) {
+                timeText = daysTaken === 1 ? '1 day' : `${daysTaken} days`;
+                if (hoursTaken > 0) {
+                    timeText += `, ${hoursTaken}h`;
+                }
+            } else if (hoursTaken > 0) {
+                timeText = hoursTaken === 1 ? '1 hour' : `${hoursTaken} hours`;
+            } else {
+                timeText = 'Less than 1 hour';
+            }
+            
             lines.push(`✅ Completed: ${task.completedAt.toLocaleDateString()} (${timeText})`);
+        } else if (task.status === 'in-progress') {
+            const timeSinceCreated = Date.now() - task.createdAt.getTime();
+            const daysInProgress = Math.floor(timeSinceCreated / (24 * 60 * 60 * 1000));
+            if (daysInProgress > 0) {
+                lines.push(`🔄 In progress for ${daysInProgress} day${daysInProgress !== 1 ? 's' : ''}`);
+            }
         }
 
         if (task.order !== undefined) {
             lines.push(`Order: #${task.order + 1}`);
+        }
+
+        // Add visual progress indicator for status
+        const statusProgress = this.getTaskStatusProgress(task.status);
+        if (statusProgress.indicator) {
+            lines.push(`Progress: ${statusProgress.indicator} ${statusProgress.text}`);
         }
 
         if (task.description) {
@@ -590,6 +636,22 @@ export class GoalTreeProvider implements vscode.TreeDataProvider<string> {
         }
 
         return lines.join('\n');
+    }
+
+    /**
+     * Get task status progress information
+     */
+    private getTaskStatusProgress(status: 'todo' | 'in-progress' | 'done'): { indicator: string; text: string } {
+        switch (status) {
+            case 'todo':
+                return { indicator: '⭕ ▯▯▯', text: '0% (Not started)' };
+            case 'in-progress':
+                return { indicator: '▶️ ▮▯▯', text: '50% (In progress)' };
+            case 'done':
+                return { indicator: '✅ ▮▮▮', text: '100% (Complete)' };
+            default:
+                return { indicator: '', text: '' };
+        }
     }
 
     /**
@@ -618,7 +680,7 @@ export class GoalTreeProvider implements vscode.TreeDataProvider<string> {
             new Date(goal.metadata.dueDate).getTime() - Date.now() < 7 * 24 * 60 * 60 * 1000;
 
         // Build context with multiple attributes
-        let contextParts = [];
+        const contextParts = [];
 
         // Add base status context
         switch (goal.status) {
@@ -1179,6 +1241,969 @@ export class GoalTreeProvider implements vscode.TreeDataProvider<string> {
         this.logger.info('Performance configuration updated', newConfig);
     }
     
+    // ===========================================
+    // Task-Specific Tree Operations
+    // ===========================================
+
+    /**
+     * Toggle task completion status
+     */
+    async toggleTaskStatus(goalId: string, taskId: string): Promise<boolean> {
+        try {
+            const goal = this.stateManager.getGoal(goalId);
+            if (!goal) {
+                this.logger.error(`Goal ${goalId} not found`);
+                return false;
+            }
+
+            const task = goal.tasks.find(t => t.id === taskId);
+            if (!task) {
+                this.logger.error(`Task ${taskId} not found in goal ${goalId}`);
+                return false;
+            }
+
+            // Determine new status based on current status
+            let newStatus: 'todo' | 'in-progress' | 'done';
+            switch (task.status) {
+                case 'todo':
+                    newStatus = 'in-progress';
+                    break;
+                case 'in-progress':
+                    newStatus = 'done';
+                    break;
+                case 'done':
+                    newStatus = 'todo';
+                    break;
+                default:
+                    newStatus = 'in-progress';
+            }
+
+            const result = await this.taskManager.updateTaskStatus(taskId, newStatus);
+            if (result.success) {
+                this.logger.debug(`Task ${taskId} status updated to ${newStatus}`);
+                this.refresh();
+                return true;
+            } else {
+                this.logger.error(`Failed to update task status: ${result.error}`);
+                vscode.window.showErrorMessage(`Failed to update task: ${result.error}`);
+                return false;
+            }
+        } catch (error) {
+            this.logger.error('Error toggling task status', error);
+            vscode.window.showErrorMessage('Failed to update task status');
+            return false;
+        }
+    }
+
+    /**
+     * Move task up in the order
+     */
+    async moveTaskUp(goalId: string, taskId: string): Promise<boolean> {
+        try {
+            const result = await this.taskManager.moveTaskUp(taskId);
+            if (result.success) {
+                this.logger.debug(`Task ${taskId} moved up`);
+                this.refresh();
+                return true;
+            } else {
+                this.logger.error(`Failed to move task up: ${result.error}`);
+                if (result.error?.includes('already at top')) {
+                    vscode.window.showInformationMessage('Task is already at the top');
+                } else {
+                    vscode.window.showErrorMessage(`Failed to move task: ${result.error}`);
+                }
+                return false;
+            }
+        } catch (error) {
+            this.logger.error('Error moving task up', error);
+            vscode.window.showErrorMessage('Failed to move task');
+            return false;
+        }
+    }
+
+    /**
+     * Move task down in the order
+     */
+    async moveTaskDown(goalId: string, taskId: string): Promise<boolean> {
+        try {
+            const result = await this.taskManager.moveTaskDown(taskId);
+            if (result.success) {
+                this.logger.debug(`Task ${taskId} moved down`);
+                this.refresh();
+                return true;
+            } else {
+                this.logger.error(`Failed to move task down: ${result.error}`);
+                if (result.error?.includes('already at bottom')) {
+                    vscode.window.showInformationMessage('Task is already at the bottom');
+                } else {
+                    vscode.window.showErrorMessage(`Failed to move task: ${result.error}`);
+                }
+                return false;
+            }
+        } catch (error) {
+            this.logger.error('Error moving task down', error);
+            vscode.window.showErrorMessage('Failed to move task');
+            return false;
+        }
+    }
+
+    /**
+     * Delete a task with confirmation
+     */
+    async deleteTask(goalId: string, taskId: string): Promise<boolean> {
+        try {
+            const goal = this.stateManager.getGoal(goalId);
+            if (!goal) {
+                this.logger.error(`Goal ${goalId} not found`);
+                return false;
+            }
+
+            const task = goal.tasks.find(t => t.id === taskId);
+            if (!task) {
+                this.logger.error(`Task ${taskId} not found`);
+                return false;
+            }
+
+            // Show confirmation dialog
+            const response = await vscode.window.showWarningMessage(
+                `Are you sure you want to delete the task "${task.title}"?`,
+                { modal: true },
+                'Delete',
+                'Cancel'
+            );
+
+            if (response !== 'Delete') {
+                return false;
+            }
+
+            const result = await this.taskManager.deleteTask(taskId);
+            if (result.success) {
+                this.logger.debug(`Task ${taskId} deleted successfully`);
+                vscode.window.showInformationMessage(`Task "${task.title}" deleted`);
+                this.refresh();
+                return true;
+            } else {
+                this.logger.error(`Failed to delete task: ${result.error}`);
+                vscode.window.showErrorMessage(`Failed to delete task: ${result.error}`);
+                return false;
+            }
+        } catch (error) {
+            this.logger.error('Error deleting task', error);
+            vscode.window.showErrorMessage('Failed to delete task');
+            return false;
+        }
+    }
+
+    /**
+     * Set specific task status
+     */
+    async setTaskStatus(goalId: string, taskId: string, status: 'todo' | 'in-progress' | 'done'): Promise<boolean> {
+        try {
+            const result = await this.taskManager.updateTaskStatus(taskId, status);
+            if (result.success) {
+                this.logger.debug(`Task ${taskId} status set to ${status}`);
+                this.refresh();
+                return true;
+            } else {
+                this.logger.error(`Failed to set task status: ${result.error}`);
+                vscode.window.showErrorMessage(`Failed to update task: ${result.error}`);
+                return false;
+            }
+        } catch (error) {
+            this.logger.error('Error setting task status', error);
+            vscode.window.showErrorMessage('Failed to update task status');
+            return false;
+        }
+    }
+
+    /**
+     * Edit task title and description
+     */
+    async editTask(goalId: string, taskId: string): Promise<boolean> {
+        try {
+            const goal = this.stateManager.getGoal(goalId);
+            if (!goal) {
+                this.logger.error(`Goal ${goalId} not found`);
+                return false;
+            }
+
+            const task = goal.tasks.find(t => t.id === taskId);
+            if (!task) {
+                this.logger.error(`Task ${taskId} not found`);
+                return false;
+            }
+
+            // Show input dialog for title
+            const newTitle = await vscode.window.showInputBox({
+                title: 'Edit Task Title',
+                prompt: 'Enter the new task title',
+                value: task.title,
+                validateInput: (value) => {
+                    if (!value?.trim()) {
+                        return 'Task title cannot be empty';
+                    }
+                    return undefined;
+                }
+            });
+
+            if (!newTitle) {
+                return false; // User cancelled
+            }
+
+            // Show input dialog for description
+            const newDescription = await vscode.window.showInputBox({
+                title: 'Edit Task Description',
+                prompt: 'Enter the task description (optional)',
+                value: task.description || '',
+                placeHolder: 'Task description...'
+            });
+
+            const result = await this.taskManager.updateTask(taskId, {
+                title: newTitle.trim(),
+                description: newDescription?.trim() || undefined
+            });
+
+            if (result.success) {
+                this.logger.debug(`Task ${taskId} updated successfully`);
+                vscode.window.showInformationMessage(`Task "${newTitle}" updated`);
+                this.refresh();
+                return true;
+            } else {
+                this.logger.error(`Failed to update task: ${result.error}`);
+                vscode.window.showErrorMessage(`Failed to update task: ${result.error}`);
+                return false;
+            }
+        } catch (error) {
+            this.logger.error('Error editing task', error);
+            vscode.window.showErrorMessage('Failed to edit task');
+            return false;
+        }
+    }
+
+    /**
+     * Perform bulk operations on multiple tasks
+     */
+    async performBulkTaskOperation(operation: 'complete' | 'delete' | 'reopen', taskIds: string[]): Promise<boolean> {
+        try {
+            if (taskIds.length === 0) {
+                vscode.window.showInformationMessage('No tasks selected');
+                return false;
+            }
+
+            let confirmed = true;
+            let operationName = '';
+            let statusUpdate: 'done' | 'todo' | undefined;
+
+            switch (operation) {
+                case 'complete':
+                    operationName = 'mark as complete';
+                    statusUpdate = 'done';
+                    break;
+                case 'delete':
+                    operationName = 'delete';
+                    const response = await vscode.window.showWarningMessage(
+                        `Are you sure you want to delete ${taskIds.length} task(s)?`,
+                        { modal: true },
+                        'Delete All',
+                        'Cancel'
+                    );
+                    confirmed = response === 'Delete All';
+                    break;
+                case 'reopen':
+                    operationName = 'reopen';
+                    statusUpdate = 'todo';
+                    break;
+            }
+
+            if (!confirmed) {
+                return false;
+            }
+
+            const progressOptions: vscode.ProgressOptions = {
+                location: vscode.ProgressLocation.Notification,
+                title: `Bulk operation: ${operationName}`,
+                cancellable: false
+            };
+
+            const success = await vscode.window.withProgress(progressOptions, async (progress) => {
+                progress.report({ message: `Processing ${taskIds.length} task(s)...` });
+
+                if (operation === 'delete') {
+                    const result = await this.bulkTaskOperations.bulkDeleteTasks(taskIds);
+                    return result.success;
+                } else if (statusUpdate) {
+                    const result = await this.bulkTaskOperations.bulkUpdateTaskStatus(taskIds, statusUpdate);
+                    return result.success;
+                }
+
+                return false;
+            });
+
+            if (success) {
+                vscode.window.showInformationMessage(
+                    `Successfully ${operation === 'complete' ? 'completed' : operation === 'delete' ? 'deleted' : 'reopened'} ${taskIds.length} task(s)`
+                );
+                this.refresh();
+                return true;
+            } else {
+                vscode.window.showErrorMessage(`Failed to ${operationName} tasks`);
+                return false;
+            }
+        } catch (error) {
+            this.logger.error('Error performing bulk task operation', error);
+            vscode.window.showErrorMessage(`Failed to ${operation} tasks`);
+            return false;
+        }
+    }
+
+    /**
+     * Get task manager instance for external access
+     */
+    getTaskManager(): TaskManager {
+        return this.taskManager;
+    }
+
+    /**
+     * Get bulk task operations instance for external access
+     */
+    getBulkTaskOperations(): BulkTaskOperations {
+        return this.bulkTaskOperations;
+    }
+
+    // ===========================================
+    // Drag-and-Drop Task Reordering Support
+    // ===========================================
+
+    /**
+     * Handle drag and drop task reordering
+     * This method supports moving tasks within the same goal or between goals
+     */
+    async reorderTaskByDragDrop(
+        sourceElement: string,
+        targetElement: string,
+        position: 'before' | 'after' | 'inside'
+    ): Promise<boolean> {
+        try {
+            // Parse source and target elements
+            const sourceInfo = this.parseElementId(sourceElement);
+            const targetInfo = this.parseElementId(targetElement);
+
+            if (!sourceInfo.isTask) {
+                this.logger.warn('Source element is not a task', { sourceElement });
+                return false;
+            }
+
+            // Handle task-to-task reordering (same goal)
+            if (targetInfo.isTask && sourceInfo.goalId === targetInfo.goalId) {
+                return await this.reorderTaskWithinGoal(
+                    sourceInfo.goalId,
+                    sourceInfo.taskId!,
+                    targetInfo.taskId!,
+                    position === 'after'
+                );
+            }
+
+            // Handle task-to-goal movement (different goal)
+            if (!targetInfo.isTask) {
+                return await this.moveTaskToGoal(
+                    sourceInfo.goalId,
+                    sourceInfo.taskId!,
+                    targetInfo.goalId
+                );
+            }
+
+            // Handle cross-goal task reordering
+            if (targetInfo.isTask && sourceInfo.goalId !== targetInfo.goalId) {
+                return await this.moveTaskToGoalWithPosition(
+                    sourceInfo.goalId,
+                    sourceInfo.taskId!,
+                    targetInfo.goalId,
+                    targetInfo.taskId!,
+                    position === 'after'
+                );
+            }
+
+            return false;
+        } catch (error) {
+            this.logger.error('Error handling drag and drop reordering', error);
+            vscode.window.showErrorMessage('Failed to reorder task');
+            return false;
+        }
+    }
+
+    /**
+     * Parse element ID to determine if it's a task or goal
+     */
+    private parseElementId(elementId: string): {
+        isTask: boolean;
+        goalId: string;
+        taskId?: string;
+    } {
+        const parts = elementId.split(':');
+        if (parts.length === 2) {
+            return {
+                isTask: true,
+                goalId: parts[0],
+                taskId: parts[1]
+            };
+        } else {
+            return {
+                isTask: false,
+                goalId: elementId
+            };
+        }
+    }
+
+    /**
+     * Reorder task within the same goal
+     */
+    private async reorderTaskWithinGoal(
+        goalId: string,
+        sourceTaskId: string,
+        targetTaskId: string,
+        insertAfter: boolean
+    ): Promise<boolean> {
+        try {
+            const goal = this.stateManager.getGoal(goalId);
+            if (!goal) {
+                return false;
+            }
+
+            const sourceIndex = goal.tasks.findIndex(t => t.id === sourceTaskId);
+            const targetIndex = goal.tasks.findIndex(t => t.id === targetTaskId);
+
+            if (sourceIndex === -1 || targetIndex === -1) {
+                return false;
+            }
+
+            const newPosition = insertAfter ? targetIndex + 1 : targetIndex;
+            const adjustedPosition = sourceIndex < newPosition ? newPosition - 1 : newPosition;
+
+            const result = await this.taskManager.setTaskOrder(sourceTaskId, adjustedPosition);
+            if (result.success) {
+                this.refresh();
+                vscode.window.showInformationMessage('Task reordered successfully');
+                return true;
+            }
+
+            return false;
+        } catch (error) {
+            this.logger.error('Error reordering task within goal', error);
+            return false;
+        }
+    }
+
+    /**
+     * Move task to different goal
+     */
+    private async moveTaskToGoal(
+        sourceGoalId: string,
+        taskId: string,
+        targetGoalId: string
+    ): Promise<boolean> {
+        try {
+            const sourceGoal = this.stateManager.getGoal(sourceGoalId);
+            const targetGoal = this.stateManager.getGoal(targetGoalId);
+
+            if (!sourceGoal || !targetGoal) {
+                return false;
+            }
+
+            const task = sourceGoal.tasks.find(t => t.id === taskId);
+            if (!task) {
+                return false;
+            }
+
+            // Confirm the move operation
+            const confirmation = await vscode.window.showWarningMessage(
+                `Move task "${task.title}" from "${sourceGoal.title}" to "${targetGoal.title}"?`,
+                { modal: true },
+                'Move',
+                'Cancel'
+            );
+
+            if (confirmation !== 'Move') {
+                return false;
+            }
+
+            // Create task in target goal
+            const createResult = await this.taskManager.createTask(targetGoalId, {
+                title: task.title,
+                description: task.description,
+                goalId: targetGoalId
+            });
+
+            if (createResult.success) {
+                // Delete task from source goal
+                const deleteResult = await this.taskManager.deleteTask(taskId);
+                if (deleteResult.success) {
+                    this.refresh();
+                    vscode.window.showInformationMessage(`Task moved to "${targetGoal.title}"`);
+                    return true;
+                } else {
+                    // Rollback: delete the newly created task
+                    await this.taskManager.deleteTask(createResult.data!.id);
+                    vscode.window.showErrorMessage('Failed to move task: could not remove from source goal');
+                }
+            } else {
+                vscode.window.showErrorMessage('Failed to move task: could not create in target goal');
+            }
+
+            return false;
+        } catch (error) {
+            this.logger.error('Error moving task to different goal', error);
+            vscode.window.showErrorMessage('Failed to move task');
+            return false;
+        }
+    }
+
+    /**
+     * Move task to different goal with specific position
+     */
+    private async moveTaskToGoalWithPosition(
+        sourceGoalId: string,
+        sourceTaskId: string,
+        targetGoalId: string,
+        targetTaskId: string,
+        insertAfter: boolean
+    ): Promise<boolean> {
+        try {
+            // First move the task to the target goal
+            const moveSuccess = await this.moveTaskToGoal(sourceGoalId, sourceTaskId, targetGoalId);
+            if (!moveSuccess) {
+                return false;
+            }
+
+            // Then find the newly created task and reorder it
+            const targetGoal = this.stateManager.getGoal(targetGoalId);
+            if (!targetGoal) {
+                return false;
+            }
+
+            // The newly moved task should be the last one in the target goal
+            const movedTask = targetGoal.tasks[targetGoal.tasks.length - 1];
+            if (movedTask) {
+                await this.reorderTaskWithinGoal(targetGoalId, movedTask.id, targetTaskId, insertAfter);
+            }
+
+            return true;
+        } catch (error) {
+            this.logger.error('Error moving task to goal with position', error);
+            return false;
+        }
+    }
+
+    /**
+     * Check if drag and drop is supported for the element
+     */
+    canDragDrop(elementId: string): boolean {
+        const info = this.parseElementId(elementId);
+        // Only tasks can be dragged for now
+        return info.isTask;
+    }
+
+    /**
+     * Get valid drop targets for a dragged element
+     */
+    getValidDropTargets(draggedElementId: string): string[] {
+        const info = this.parseElementId(draggedElementId);
+        if (!info.isTask) {
+            return [];
+        }
+
+        const validTargets: string[] = [];
+        
+        // Get all goals as potential drop targets
+        const allGoals = this.stateManager.getRootGoals();
+        allGoals.forEach(goal => {
+            validTargets.push(goal.id);
+            
+            // Add tasks from other goals as drop targets
+            goal.tasks.forEach(task => {
+                if (task.id !== info.taskId) {
+                    validTargets.push(`${goal.id}:${task.id}`);
+                }
+            });
+        });
+
+        return validTargets;
+    }
+
+    // ===========================================
+    // Keyboard Navigation Support for Tasks
+    // ===========================================
+
+    /**
+     * Handle keyboard navigation for tree items
+     */
+    async handleKeyboardNavigation(
+        elementId: string,
+        key: string,
+        modifiers: {
+            ctrl?: boolean;
+            shift?: boolean;
+            alt?: boolean;
+        } = {}
+    ): Promise<boolean> {
+        try {
+            const info = this.parseElementId(elementId);
+            
+            if (info.isTask && info.taskId) {
+                return await this.handleTaskKeyboardNavigation(
+                    info.goalId,
+                    info.taskId,
+                    key,
+                    modifiers
+                );
+            } else {
+                return await this.handleGoalKeyboardNavigation(
+                    info.goalId,
+                    key,
+                    modifiers
+                );
+            }
+        } catch (error) {
+            this.logger.error('Error handling keyboard navigation', error);
+            return false;
+        }
+    }
+
+    /**
+     * Handle keyboard navigation specifically for tasks
+     */
+    private async handleTaskKeyboardNavigation(
+        goalId: string,
+        taskId: string,
+        key: string,
+        modifiers: {
+            ctrl?: boolean;
+            shift?: boolean;
+            alt?: boolean;
+        }
+    ): Promise<boolean> {
+        const goal = this.stateManager.getGoal(goalId);
+        if (!goal) {
+            return false;
+        }
+
+        const task = goal.tasks.find(t => t.id === taskId);
+        if (!task) {
+            return false;
+        }
+
+        switch (key.toLowerCase()) {
+            // Toggle task completion with Space
+            case ' ':
+            case 'space':
+                return await this.toggleTaskStatus(goalId, taskId);
+
+            // Move task up with Ctrl+Up
+            case 'arrowup':
+                if (modifiers.ctrl) {
+                    return await this.moveTaskUp(goalId, taskId);
+                }
+                break;
+
+            // Move task down with Ctrl+Down
+            case 'arrowdown':
+                if (modifiers.ctrl) {
+                    return await this.moveTaskDown(goalId, taskId);
+                }
+                break;
+
+            // Edit task with F2 or Enter
+            case 'f2':
+            case 'enter':
+                if (!modifiers.ctrl && !modifiers.shift) {
+                    return await this.editTask(goalId, taskId);
+                }
+                break;
+
+            // Delete task with Delete key
+            case 'delete':
+                if (modifiers.shift) {
+                    return await this.deleteTask(goalId, taskId);
+                }
+                break;
+
+            // Quick status changes
+            case '1':
+                if (modifiers.ctrl) {
+                    return await this.setTaskStatus(goalId, taskId, 'todo');
+                }
+                break;
+            case '2':
+                if (modifiers.ctrl) {
+                    return await this.setTaskStatus(goalId, taskId, 'in-progress');
+                }
+                break;
+            case '3':
+                if (modifiers.ctrl) {
+                    return await this.setTaskStatus(goalId, taskId, 'done');
+                }
+                break;
+
+            // Duplicate task with Ctrl+D
+            case 'd':
+                if (modifiers.ctrl && !modifiers.shift) {
+                    return await this.duplicateTaskViaKeyboard(goalId, taskId);
+                }
+                break;
+
+            // Move to top with Ctrl+Home
+            case 'home':
+                if (modifiers.ctrl) {
+                    return await this.moveTaskToPosition(goalId, taskId, 0);
+                }
+                break;
+
+            // Move to bottom with Ctrl+End
+            case 'end':
+                if (modifiers.ctrl) {
+                    return await this.moveTaskToPosition(goalId, taskId, -1);
+                }
+                break;
+
+            // Show task details with Ctrl+I
+            case 'i':
+                if (modifiers.ctrl) {
+                    return this.showTaskDetailsViaKeyboard(goalId, taskId);
+                }
+                break;
+
+            // Copy task ID with Ctrl+Shift+C
+            case 'c':
+                if (modifiers.ctrl && modifiers.shift) {
+                    return this.copyTaskIdViaKeyboard(taskId);
+                }
+                break;
+
+            default:
+                return false;
+        }
+
+        return false;
+    }
+
+    /**
+     * Handle keyboard navigation for goals (placeholder for future enhancement)
+     */
+    private async handleGoalKeyboardNavigation(
+        goalId: string,
+        key: string,
+        modifiers: {
+            ctrl?: boolean;
+            shift?: boolean;
+            alt?: boolean;
+        }
+    ): Promise<boolean> {
+        // For now, just basic goal navigation
+        const goal = this.stateManager.getGoal(goalId);
+        if (!goal) {
+            return false;
+        }
+
+        switch (key.toLowerCase()) {
+            // Add new task with Ctrl+N
+            case 'n':
+                if (modifiers.ctrl) {
+                    return await this.addTaskViaKeyboard(goalId);
+                }
+                break;
+
+            // Expand/collapse with Space
+            case ' ':
+            case 'space':
+                return await this.toggleGoalExpansion(goalId);
+
+            default:
+                return false;
+        }
+
+        return false;
+    }
+
+    /**
+     * Duplicate task via keyboard shortcut
+     */
+    private async duplicateTaskViaKeyboard(goalId: string, taskId: string): Promise<boolean> {
+        try {
+            const goal = this.stateManager.getGoal(goalId);
+            if (!goal) {
+                return false;
+            }
+
+            const task = goal.tasks.find(t => t.id === taskId);
+            if (!task) {
+                return false;
+            }
+
+            const result = await this.taskManager.createTask(goalId, {
+                title: `${task.title} (Copy)`,
+                description: task.description,
+                goalId: goalId
+            });
+
+            if (result.success) {
+                this.refresh();
+                vscode.window.showInformationMessage(`Task duplicated: ${task.title}`);
+                return true;
+            }
+
+            return false;
+        } catch (error) {
+            this.logger.error('Error duplicating task via keyboard', error);
+            return false;
+        }
+    }
+
+    /**
+     * Show task details via keyboard shortcut
+     */
+    private showTaskDetailsViaKeyboard(goalId: string, taskId: string): boolean {
+        try {
+            const goal = this.stateManager.getGoal(goalId);
+            if (!goal) {
+                return false;
+            }
+
+            const task = goal.tasks.find(t => t.id === taskId);
+            if (!task) {
+                return false;
+            }
+
+            const details = [
+                `📋 ${task.title}`,
+                '',
+                `Status: ${task.status}`,
+                `Created: ${task.createdAt.toLocaleDateString()}`,
+                task.completedAt ? `Completed: ${task.completedAt.toLocaleDateString()}` : '',
+                `Order: #${(task.order || 0) + 1}`,
+                `Goal: ${goal.title}`,
+                '',
+                task.description ? `📝 ${task.description}` : 'No description',
+                '',
+                `Keyboard Shortcuts:`,
+                '• Space: Toggle completion',
+                '• Ctrl+Up/Down: Move task',
+                '• F2/Enter: Edit task',
+                '• Shift+Delete: Delete task',
+                '• Ctrl+1/2/3: Set status',
+                '• Ctrl+D: Duplicate',
+                '• Ctrl+Home/End: Move to top/bottom'
+            ].filter(line => line !== '').join('\n');
+
+            vscode.window.showInformationMessage(details, { modal: true });
+            return true;
+        } catch (error) {
+            this.logger.error('Error showing task details via keyboard', error);
+            return false;
+        }
+    }
+
+    /**
+     * Copy task ID via keyboard shortcut
+     */
+    private copyTaskIdViaKeyboard(taskId: string): boolean {
+        try {
+            vscode.env.clipboard.writeText(taskId);
+            vscode.window.showInformationMessage(`Task ID copied: ${taskId}`);
+            return true;
+        } catch (error) {
+            this.logger.error('Error copying task ID via keyboard', error);
+            return false;
+        }
+    }
+
+    /**
+     * Add new task via keyboard shortcut
+     */
+    private async addTaskViaKeyboard(goalId: string): Promise<boolean> {
+        try {
+            const title = await vscode.window.showInputBox({
+                title: 'Add New Task',
+                prompt: 'Enter task title',
+                validateInput: (value) => {
+                    if (!value?.trim()) {
+                        return 'Task title cannot be empty';
+                    }
+                    return undefined;
+                }
+            });
+
+            if (!title) {
+                return false;
+            }
+
+            const description = await vscode.window.showInputBox({
+                title: 'Task Description',
+                prompt: 'Enter task description (optional)',
+                placeHolder: 'Task description...'
+            });
+
+            const result = await this.taskManager.createTask(goalId, {
+                title: title.trim(),
+                description: description?.trim() || undefined,
+                goalId: goalId
+            });
+
+            if (result.success) {
+                this.refresh();
+                vscode.window.showInformationMessage(`Task created: ${title}`);
+                return true;
+            } else {
+                vscode.window.showErrorMessage(`Failed to create task: ${result.error}`);
+                return false;
+            }
+        } catch (error) {
+            this.logger.error('Error adding task via keyboard', error);
+            vscode.window.showErrorMessage('Failed to add task');
+            return false;
+        }
+    }
+
+    /**
+     * Toggle goal expansion state
+     */
+    private async toggleGoalExpansion(goalId: string): Promise<boolean> {
+        try {
+            const currentState = this.isExpanded(goalId);
+            this.viewState[goalId] = !currentState;
+            this.refresh();
+            return true;
+        } catch (error) {
+            this.logger.error('Error toggling goal expansion', error);
+            return false;
+        }
+    }
+
+    /**
+     * Get keyboard shortcuts help for the current element
+     */
+    getKeyboardShortcuts(elementId: string): string[] {
+        const info = this.parseElementId(elementId);
+        
+        if (info.isTask) {
+            return [
+                'Space: Toggle task completion',
+                'Ctrl+Up/Down: Move task up/down',
+                'F2 or Enter: Edit task',
+                'Shift+Delete: Delete task',
+                'Ctrl+1/2/3: Set status (todo/in-progress/done)',
+                'Ctrl+D: Duplicate task',
+                'Ctrl+Home/End: Move to top/bottom',
+                'Ctrl+I: Show task details',
+                'Ctrl+Shift+C: Copy task ID'
+            ];
+        } else {
+            return [
+                'Ctrl+N: Add new task',
+                'Space: Expand/collapse goal',
+                'Enter: Edit goal (if supported)'
+            ];
+        }
+    }
+
     /**
      * Dispose method for cleanup
      */
@@ -1194,6 +2219,8 @@ export class GoalTreeProvider implements vscode.TreeDataProvider<string> {
         this.cache.clear();
         this.loadingStates.clear();
         this.profiler.reset();
+        this.taskManager?.dispose();
+        this.bulkTaskOperations?.dispose();
         this.logger.info('GoalTreeProvider disposed');
     }
 }

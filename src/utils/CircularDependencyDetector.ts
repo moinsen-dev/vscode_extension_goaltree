@@ -860,7 +860,7 @@ export class CircularDependencyDetector {
      * Assess the impact of a cycle
      */
     private assessCycleImpact(graph: DependencyGraph, cycle: string[]): CycleImpact {
-        let blockedGoals = cycle.length; // At minimum, all goals in the cycle are blocked
+        const blockedGoals = cycle.length; // At minimum, all goals in the cycle are blocked
         let indirectlyAffectedGoals = 0;
         let affectsCriticalPath = false;
         
