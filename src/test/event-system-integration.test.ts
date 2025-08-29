@@ -2,7 +2,7 @@
  * Integration tests for EventManager and UndoRedoManager with GoalManager
  */
 
-import { GoalManager } from '../services/goalManager';
+import { GoalManager } from '../services/GoalManager';
 import { EventManager } from '../services/EventManager';
 import { UndoRedoManager } from '../services/UndoRedoManager';
 import { ValidationService } from '../services/ValidationService';
@@ -23,7 +23,7 @@ async function testEventManagerIntegration() {
 
     const eventManager = new EventManager(undefined, 1000, mockLogger);
     const validationService = new ValidationService();
-    const goalManager = new GoalManager(validationService, eventManager, undefined, mockLogger);
+    const GoalManager = new GoalManager(validationService, eventManager, undefined, mockLogger);
 
     let eventsReceived: any[] = [];
 
@@ -40,28 +40,28 @@ async function testEventManagerIntegration() {
 
     try {
         // Test goal creation
-        const goal = await goalManager.createGoal({
+        const goal = await GoalManager.createGoal({
             title: 'Test Goal',
             description: 'A test goal for event integration'
         });
         console.log(`Created goal: ${goal.title} (${goal.id})`);
 
         // Test goal update
-        const updatedGoal = await goalManager.updateGoal(goal.id, {
+        const updatedGoal = await GoalManager.updateGoal(goal.id, {
             title: 'Updated Test Goal',
             status: GoalStatus.IN_PROGRESS
         });
         console.log(`Updated goal: ${updatedGoal.title}`);
 
         // Test task addition
-        const task = await goalManager.addTask(goal.id, {
+        const task = await GoalManager.addTask(goal.id, {
             title: 'Test Task',
             description: 'A test task'
         });
         console.log(`Added task: ${task.title} (${task.id})`);
 
         // Test goal deletion
-        await goalManager.deleteGoal(goal.id);
+        await GoalManager.deleteGoal(goal.id);
         console.log(`Deleted goal: ${goal.id}`);
 
         // Verify events were received
@@ -93,7 +93,7 @@ async function testEventManagerIntegration() {
     } catch (error) {
         console.error('❌ EventManager integration test FAILED:', error);
     } finally {
-        goalManager.dispose();
+        GoalManager.dispose();
     }
 }
 
@@ -106,37 +106,37 @@ async function testUndoRedoIntegration() {
     const eventManager = new EventManager(undefined, 1000, mockLogger);
     const undoRedoManager = new UndoRedoManager(100, 10, mockLogger);
     const validationService = new ValidationService();
-    const goalManager = new GoalManager(validationService, eventManager, undoRedoManager, mockLogger);
+    const GoalManager = new GoalManager(validationService, eventManager, undoRedoManager, mockLogger);
 
     try {
         // Test goal creation
         console.log('Creating goal...');
-        const goal = await goalManager.createGoal({
+        const goal = await GoalManager.createGoal({
             title: 'Undo Test Goal',
             description: 'A goal for testing undo/redo'
         });
         console.log(`Created goal: ${goal.title} (${goal.id})`);
-        console.log(`Can undo: ${goalManager.canUndo()}`);
+        console.log(`Can undo: ${GoalManager.canUndo()}`);
 
         // Test undo goal creation
         console.log('Undoing goal creation...');
-        const undoResult = await goalManager.undo();
+        const undoResult = await GoalManager.undo();
         console.log(`Undo result: success=${undoResult.success}, processed=${undoResult.commandsProcessed}`);
         
-        const goalAfterUndo = goalManager.getGoal(goal.id);
+        const goalAfterUndo = GoalManager.getGoal(goal.id);
         if (goalAfterUndo) {
             console.error('❌ Goal should be deleted after undo');
         } else {
             console.log('✅ Goal correctly deleted after undo');
         }
-        console.log(`Can redo: ${goalManager.canRedo()}`);
+        console.log(`Can redo: ${GoalManager.canRedo()}`);
 
         // Test redo goal creation
         console.log('Redoing goal creation...');
-        const redoResult = await goalManager.redo();
+        const redoResult = await GoalManager.redo();
         console.log(`Redo result: success=${redoResult.success}, processed=${redoResult.commandsProcessed}`);
         
-        const goalAfterRedo = goalManager.getGoal(goal.id);
+        const goalAfterRedo = GoalManager.getGoal(goal.id);
         if (goalAfterRedo) {
             console.log('✅ Goal correctly recreated after redo');
         } else {
@@ -146,18 +146,18 @@ async function testUndoRedoIntegration() {
         // Test goal update with undo/redo
         console.log('Updating goal...');
         const originalTitle = goalAfterRedo!.title;
-        await goalManager.updateGoal(goal.id, {
+        await GoalManager.updateGoal(goal.id, {
             title: 'Modified Title',
             description: 'Modified description'
         });
         
-        const modifiedGoal = goalManager.getGoal(goal.id);
+        const modifiedGoal = GoalManager.getGoal(goal.id);
         console.log(`Modified goal title: ${modifiedGoal!.title}`);
 
         console.log('Undoing goal update...');
-        await goalManager.undo();
+        await GoalManager.undo();
         
-        const restoredGoal = goalManager.getGoal(goal.id);
+        const restoredGoal = GoalManager.getGoal(goal.id);
         if (restoredGoal!.title === originalTitle) {
             console.log('✅ Goal title correctly restored after undo');
         } else {
@@ -166,22 +166,22 @@ async function testUndoRedoIntegration() {
 
         // Test bulk operations with undo/redo
         console.log('Creating multiple goals for bulk operations...');
-        const goal2 = await goalManager.createGoal({ title: 'Bulk Test Goal 2' });
-        const goal3 = await goalManager.createGoal({ title: 'Bulk Test Goal 3' });
+        const goal2 = await GoalManager.createGoal({ title: 'Bulk Test Goal 2' });
+        const goal3 = await GoalManager.createGoal({ title: 'Bulk Test Goal 3' });
 
         console.log('Performing bulk complete operation...');
-        const bulkResult = await goalManager.bulkCompleteGoals([goal.id, goal2.id, goal3.id]);
+        const bulkResult = await GoalManager.bulkCompleteGoals([goal.id, goal2.id, goal3.id]);
         console.log(`Bulk operation: ${bulkResult.successful} successful, ${bulkResult.failed} failed`);
 
         // Check if goals are completed
         const completedGoals = [goal.id, goal2.id, goal3.id]
-            .map(id => goalManager.getGoal(id))
+            .map(id => GoalManager.getGoal(id))
             .filter(g => g?.status === GoalStatus.COMPLETED);
         console.log(`${completedGoals.length} goals are now completed`);
 
         // Test snapshot functionality
         console.log('Creating state snapshot...');
-        const snapshotId = goalManager.createSnapshot('Before cleanup');
+        const snapshotId = GoalManager.createSnapshot('Before cleanup');
         if (snapshotId) {
             console.log(`✅ Snapshot created: ${snapshotId}`);
         }
@@ -191,7 +191,7 @@ async function testUndoRedoIntegration() {
     } catch (error) {
         console.error('❌ UndoRedo integration test FAILED:', error);
     } finally {
-        goalManager.dispose();
+        GoalManager.dispose();
     }
 }
 
@@ -203,7 +203,7 @@ async function testAdvancedEventFeatures() {
 
     const eventManager = new EventManager(undefined, 1000, mockLogger);
     const validationService = new ValidationService();
-    const goalManager = new GoalManager(validationService, eventManager, undefined, mockLogger);
+    const GoalManager = new GoalManager(validationService, eventManager, undefined, mockLogger);
 
     try {
         let priorityEventsCount = 0;
@@ -222,9 +222,9 @@ async function testAdvancedEventFeatures() {
         });
 
         // Create goals to trigger events
-        await goalManager.createGoal({ title: 'Regular Goal' });
-        await goalManager.createGoal({ title: 'Filter Test Goal' });
-        await goalManager.createGoal({ title: 'Another Filter Goal' });
+        await GoalManager.createGoal({ title: 'Regular Goal' });
+        await GoalManager.createGoal({ title: 'Filter Test Goal' });
+        await GoalManager.createGoal({ title: 'Another Filter Goal' });
 
         // Wait a bit for async event processing
         await new Promise(resolve => setTimeout(resolve, 100));
@@ -251,7 +251,7 @@ async function testAdvancedEventFeatures() {
     } catch (error) {
         console.error('❌ Advanced event features test FAILED:', error);
     } finally {
-        goalManager.dispose();
+        GoalManager.dispose();
     }
 }
 

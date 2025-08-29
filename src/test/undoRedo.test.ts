@@ -14,7 +14,7 @@ import * as vscode from 'vscode';
 import { Goal, CreateGoalParams, UpdateGoalParams, GoalStatus, TaskStatus } from '../types';
 import { UndoRedoManager, UndoableCommand } from '../services/UndoRedoManager';
 import { GoalUndoRedoService } from '../services/GoalUndoRedoService';
-import { GoalManager } from '../services/goalManager';
+import { GoalManager } from '../services/GoalManager';
 import { StorageService } from '../services/storageService';
 import { ValidationService } from '../services/ValidationService';
 import {
@@ -106,16 +106,16 @@ function createMockCommand(description: string, shouldFail = false): UndoableCom
 suite('UndoRedo System Tests', () => {
     let undoRedoManager: UndoRedoManager;
     let storageService: MockStorageService;
-    let goalManager: GoalManager;
+    let GoalManager: GoalManager;
     let undoRedoService: GoalUndoRedoService;
     let commandFactory: CommandFactory;
     
     setup(() => {
         undoRedoManager = new UndoRedoManager();
         storageService = new MockStorageService();
-        goalManager = new GoalManager(storageService, new ValidationService());
-        undoRedoService = new GoalUndoRedoService(goalManager, undoRedoManager);
-        commandFactory = new CommandFactory(goalManager);
+        GoalManager = new GoalManager(storageService, new ValidationService());
+        undoRedoService = new GoalUndoRedoService(GoalManager, undoRedoManager);
+        commandFactory = new CommandFactory(GoalManager);
     });
     
     teardown(() => {
@@ -228,13 +228,13 @@ suite('UndoRedo System Tests', () => {
             
             // Test undo
             await command.undo();
-            const goalResult = await goalManager.getGoal(createdGoal.id);
+            const goalResult = await GoalManager.getGoal(createdGoal.id);
             assert.strictEqual(goalResult.success, false);
         });
 
         test('UpdateGoalCommand should work correctly', async () => {
             // Create initial goal
-            const createResult = await goalManager.createGoal({
+            const createResult = await GoalManager.createGoal({
                 title: 'Original Title',
                 description: 'Original Description'
             });
@@ -250,20 +250,20 @@ suite('UndoRedo System Tests', () => {
             await command.execute();
             
             // Verify update
-            const updatedResult = await goalManager.getGoal(goal.id);
+            const updatedResult = await GoalManager.getGoal(goal.id);
             assert.strictEqual(updatedResult.success, true);
             assert.strictEqual(updatedResult.data!.title, updates.title);
             
             // Test undo
             await command.undo();
-            const restoredResult = await goalManager.getGoal(goal.id);
+            const restoredResult = await GoalManager.getGoal(goal.id);
             assert.strictEqual(restoredResult.success, true);
             assert.strictEqual(restoredResult.data!.title, 'Original Title');
         });
 
         test('DeleteGoalCommand should work correctly', async () => {
             // Create initial goal
-            const createResult = await goalManager.createGoal({
+            const createResult = await GoalManager.createGoal({
                 title: 'Goal to Delete',
                 description: 'This goal will be deleted'
             });
@@ -274,12 +274,12 @@ suite('UndoRedo System Tests', () => {
             await command.execute();
             
             // Verify deletion
-            const deletedResult = await goalManager.getGoal(goal.id);
+            const deletedResult = await GoalManager.getGoal(goal.id);
             assert.strictEqual(deletedResult.success, false);
             
             // Test undo - goal should be recreated
             await command.undo();
-            const restoredResult = await goalManager.getGoal(goal.id);
+            const restoredResult = await GoalManager.getGoal(goal.id);
             assert.strictEqual(restoredResult.success, true);
             // Note: ID may be different due to recreation, but title should match
             assert.strictEqual(restoredResult.data!.title, goal.title);
@@ -287,7 +287,7 @@ suite('UndoRedo System Tests', () => {
 
         test('ChangeGoalStatusCommand should work correctly', async () => {
             // Create initial goal
-            const createResult = await goalManager.createGoal({
+            const createResult = await GoalManager.createGoal({
                 title: 'Status Test Goal'
             });
             assert.strictEqual(createResult.success, true);
@@ -299,20 +299,20 @@ suite('UndoRedo System Tests', () => {
             await command.execute();
             
             // Verify status change
-            const updatedResult = await goalManager.getGoal(goal.id);
+            const updatedResult = await GoalManager.getGoal(goal.id);
             assert.strictEqual(updatedResult.success, true);
             assert.strictEqual(updatedResult.data!.status, newStatus);
             
             // Test undo
             await command.undo();
-            const restoredResult = await goalManager.getGoal(goal.id);
+            const restoredResult = await GoalManager.getGoal(goal.id);
             assert.strictEqual(restoredResult.success, true);
             assert.strictEqual(restoredResult.data!.status, originalStatus);
         });
 
         test('AddTaskCommand should work correctly', async () => {
             // Create initial goal
-            const createResult = await goalManager.createGoal({
+            const createResult = await GoalManager.createGoal({
                 title: 'Goal for Task Test'
             });
             assert.strictEqual(createResult.success, true);
@@ -332,13 +332,13 @@ suite('UndoRedo System Tests', () => {
             assert.strictEqual(addedTask.title, taskParams.title);
             
             // Verify task was added to goal
-            const goalWithTask = await goalManager.getGoal(goal.id);
+            const goalWithTask = await GoalManager.getGoal(goal.id);
             assert.strictEqual(goalWithTask.success, true);
             assert.strictEqual(goalWithTask.data!.tasks.length, 1);
             
             // Test undo
             await command.undo();
-            const goalAfterUndo = await goalManager.getGoal(goal.id);
+            const goalAfterUndo = await GoalManager.getGoal(goal.id);
             assert.strictEqual(goalAfterUndo.success, true);
             assert.strictEqual(goalAfterUndo.data!.tasks.length, 0);
         });
@@ -374,7 +374,7 @@ suite('UndoRedo System Tests', () => {
             assert.strictEqual(undoResult.success, true);
             
             // Verify goal was removed
-            const goalResult = await goalManager.getGoal(goalId);
+            const goalResult = await GoalManager.getGoal(goalId);
             assert.strictEqual(goalResult.success, false);
             
             // Redo the creation
@@ -402,14 +402,14 @@ suite('UndoRedo System Tests', () => {
             assert.strictEqual(undoResult.success, true);
             
             // All goals should be removed
-            const allGoals = await goalManager.getAllGoals();
+            const allGoals = await GoalManager.getAllGoals();
             assert.strictEqual(allGoals.success, true);
             assert.strictEqual(allGoals.data!.length, 0);
         });
 
         test('should create automatic snapshots', async () => {
             const config = { autoSnapshot: true, enableLogging: true };
-            const serviceWithSnapshots = new GoalUndoRedoService(goalManager, undoRedoManager, config);
+            const serviceWithSnapshots = new GoalUndoRedoService(GoalManager, undoRedoManager, config);
             
             // Create some goals
             await serviceWithSnapshots.createGoal({ title: 'Goal 1' });
@@ -442,7 +442,7 @@ suite('UndoRedo System Tests', () => {
             
             // Verify all goals are completed
             for (const goalId of goalIds) {
-                const goalResult = await goalManager.getGoal(goalId);
+                const goalResult = await GoalManager.getGoal(goalId);
                 assert.strictEqual(goalResult.success, true);
                 assert.strictEqual(goalResult.data!.status, GoalStatus.COMPLETED);
             }
@@ -453,7 +453,7 @@ suite('UndoRedo System Tests', () => {
             
             // Verify all goals are back to original status
             for (const goalId of goalIds) {
-                const goalResult = await goalManager.getGoal(goalId);
+                const goalResult = await GoalManager.getGoal(goalId);
                 assert.strictEqual(goalResult.success, true);
                 assert.strictEqual(goalResult.data!.status, GoalStatus.PLANNED);
             }
@@ -473,7 +473,7 @@ suite('UndoRedo System Tests', () => {
 
         test('should handle disposal correctly', () => {
             const newManager = new UndoRedoManager();
-            const newService = new GoalUndoRedoService(goalManager, newManager);
+            const newService = new GoalUndoRedoService(GoalManager, newManager);
             
             // Add some operations
             newService.createGoal({ title: 'Test Goal' });
@@ -502,8 +502,8 @@ suite('UndoRedo System Tests', () => {
         });
 
         test('should handle circular dependency prevention', async () => {
-            const goal1Result = await goalManager.createGoal({ title: 'Goal 1' });
-            const goal2Result = await goalManager.createGoal({ title: 'Goal 2', parentId: goal1Result.data!.id });
+            const goal1Result = await GoalManager.createGoal({ title: 'Goal 1' });
+            const goal2Result = await GoalManager.createGoal({ title: 'Goal 2', parentId: goal1Result.data!.id });
             
             // Try to make goal1 a child of goal2 (would create cycle)
             const moveCommand = commandFactory.moveGoal(goal1Result.data!.id, goal2Result.data!.id);

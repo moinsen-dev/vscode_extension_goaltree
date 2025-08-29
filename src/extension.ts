@@ -32,7 +32,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	stateManager = new StateManager();
 	dependencyService = new DependencyService(stateManager);
 	validationService = new ValidationService();
-	goalManager = new GoalManager(validationService);
+	goalManager = new GoalManager(storageService, validationService);
 	changeNotificationService = ChangeNotificationService.getInstance();
 
 	// Initialize tree components

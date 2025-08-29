@@ -9,7 +9,7 @@ import * as vscode from 'vscode';
 import { Goal, Task, GoalStatus, TaskStatus, TaskStatusType } from '../types/Goal';
 import { TREE_CONTEXT_VALUES } from '../types/TreeTypes';
 import { StateManager } from '../services/stateManager';
-import { GoalManager } from '../services/goalManager';
+import { GoalManager } from '../services/GoalManager';
 import { TaskManager } from '../services/TaskManager';
 import { BulkTaskOperations } from '../services/BulkTaskOperations';
 import { GoalTreeProvider } from './GoalTreeProvider';
@@ -49,7 +49,7 @@ export class TreeContextMenuProvider {
 
     constructor(
         private stateManager: StateManager,
-        private goalManager: GoalManager,
+        private GoalManager: GoalManager,
         private taskManager: TaskManager,
         private bulkTaskOperations: BulkTaskOperations,
         private goalTreeProvider?: GoalTreeProvider

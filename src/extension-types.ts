@@ -23,7 +23,7 @@ export interface ActivationResult {
  * Core extension services
  */
 export interface ExtensionServices {
-  goalManager: any; // Will be typed when service is available
+  GoalManager: any; // Will be typed when service is available
   stateManager: any;
   storageService: any;
   dependencyService: any;

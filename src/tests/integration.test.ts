@@ -23,15 +23,15 @@ const mockLogger = (message: string) => {
  * Test class for Visual Integration
  */
 class VisualIntegrationTest {
-    private goalManager: GoalManager;
+    private GoalManager: GoalManager;
     private treeProvider: GoalTreeProvider;
     private treeCommands: TreeCommands;
 
     constructor() {
         const validationService = new ValidationService();
-        this.goalManager = new GoalManager(validationService, mockLogger);
-        this.treeProvider = new GoalTreeProvider(this.goalManager);
-        this.treeCommands = new TreeCommands(this.goalManager, this.treeProvider);
+        this.GoalManager = new GoalManager(validationService, mockLogger);
+        this.treeProvider = new GoalTreeProvider(this.GoalManager);
+        this.treeCommands = new TreeCommands(this.GoalManager, this.treeProvider);
     }
 
     /**
@@ -52,11 +52,11 @@ class VisualIntegrationTest {
                 description: 'Required for Project A'
             };
 
-            const goal1 = await this.goalManager.createGoal(goal1Params);
-            const goal2 = await this.goalManager.createGoal(goal2Params);
+            const goal1 = await this.GoalManager.createGoal(goal1Params);
+            const goal2 = await this.GoalManager.createGoal(goal2Params);
 
             // Add a blocking dependency
-            await this.goalManager.addBlockingDependency(goal1.id, goal2.id);
+            await this.GoalManager.addBlockingDependency(goal1.id, goal2.id);
 
             // Test tree provider
             const rootItems = await this.treeProvider.getChildren();
@@ -98,24 +98,24 @@ class VisualIntegrationTest {
             console.log('Testing dependency visualization...');
 
             // Create a chain of dependencies
-            const goalA = await this.goalManager.createGoal({
+            const goalA = await this.GoalManager.createGoal({
                 title: 'Goal A (Final)',
                 description: 'Depends on B'
             });
 
-            const goalB = await this.goalManager.createGoal({
+            const goalB = await this.GoalManager.createGoal({
                 title: 'Goal B (Middle)',
                 description: 'Depends on C'
             });
 
-            const goalC = await this.goalManager.createGoal({
+            const goalC = await this.GoalManager.createGoal({
                 title: 'Goal C (First)',
                 description: 'No dependencies'
             });
 
             // Create dependency chain: A -> B -> C
-            await this.goalManager.addBlockingDependency(goalA.id, goalB.id);
-            await this.goalManager.addBlockingDependency(goalB.id, goalC.id);
+            await this.GoalManager.addBlockingDependency(goalA.id, goalB.id);
+            await this.GoalManager.addBlockingDependency(goalB.id, goalC.id);
 
             // Test that visual indicators are correct
             const rootItems = await this.treeProvider.getChildren();
@@ -158,12 +158,12 @@ class VisualIntegrationTest {
             console.log('Testing tree refresh functionality...');
 
             // Create a goal and add a task
-            const goal = await this.goalManager.createGoal({
+            const goal = await this.GoalManager.createGoal({
                 title: 'Test Goal for Refresh',
                 description: 'Testing refresh logic'
             });
 
-            await this.goalManager.addTask(goal.id, {
+            await this.GoalManager.addTask(goal.id, {
                 title: 'Test Task',
                 description: 'Testing task display'
             });
@@ -266,7 +266,7 @@ class VisualIntegrationTest {
         }
 
         // Cleanup
-        this.goalManager.dispose();
+        this.GoalManager.dispose();
         this.treeProvider.dispose();
     }
 }

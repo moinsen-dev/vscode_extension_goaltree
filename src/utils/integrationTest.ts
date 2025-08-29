@@ -9,7 +9,7 @@ import {
     CreateGoalParams,
     UpdateGoalParams
 } from '../types';
-import { GoalManager } from '../services/goalManager';
+import { GoalManager } from '../services/GoalManager';
 import { StorageService } from '../services/storageService';
 import { GoalValidationService } from '../services/GoalValidationService';
 import { GoalUtils } from './goalUtils';
@@ -23,7 +23,7 @@ export async function testGoalManagerIntegration(): Promise<void> {
     // Create services (in real usage, these would be injected)
     const storageService = new StorageService({} as any); // Mock context
     const goalValidationService = new GoalValidationService();
-    const goalManager = new GoalManager(storageService);
+    const GoalManager = new GoalManager(storageService);
 
     try {
         // 1. Create some test goals using GoalManager
@@ -35,7 +35,7 @@ export async function testGoalManagerIntegration(): Promise<void> {
             metadata: { priority: 5, tags: ['project', 'high-priority'] }
         };
 
-        const goal1Result = await goalManager.createGoal(goal1Params);
+        const goal1Result = await GoalManager.createGoal(goal1Params);
         if (!goal1Result.success || !goal1Result.data) {
             throw new Error('Failed to create goal 1');
         }
@@ -48,7 +48,7 @@ export async function testGoalManagerIntegration(): Promise<void> {
             metadata: { priority: 4, tags: ['planning'] }
         };
 
-        const goal2Result = await goalManager.createGoal(goal2Params);
+        const goal2Result = await GoalManager.createGoal(goal2Params);
         if (!goal2Result.success || !goal2Result.data) {
             throw new Error('Failed to create goal 2');
         }
@@ -61,7 +61,7 @@ export async function testGoalManagerIntegration(): Promise<void> {
             metadata: { priority: 5, tags: ['implementation'] }
         };
 
-        const goal3Result = await goalManager.createGoal(goal3Params);
+        const goal3Result = await GoalManager.createGoal(goal3Params);
         if (!goal3Result.success || !goal3Result.data) {
             throw new Error('Failed to create goal 3');
         }
@@ -69,7 +69,7 @@ export async function testGoalManagerIntegration(): Promise<void> {
 
         // 2. Get all goals for validation and utility testing
         console.log('2. Retrieving all goals...');
-        const allGoalsResult = await goalManager.getAllGoals();
+        const allGoalsResult = await GoalManager.getAllGoals();
         if (!allGoalsResult.success || !allGoalsResult.data) {
             throw new Error('Failed to get all goals');
         }
@@ -137,12 +137,12 @@ export async function testGoalManagerIntegration(): Promise<void> {
         console.log('7. Testing bulk operations...');
         
         // Add some tasks first
-        await goalManager.addTask(goal2.id, {
+        await GoalManager.addTask(goal2.id, {
             title: 'Create project plan',
             description: 'Detailed project planning'
         });
         
-        await goalManager.addTask(goal2.id, {
+        await GoalManager.addTask(goal2.id, {
             title: 'Define requirements',
             description: 'Gather and document requirements'
         });
@@ -151,7 +151,7 @@ export async function testGoalManagerIntegration(): Promise<void> {
         const bulkUpdateResult = await GoalUtils.bulkUpdateStatus(
             [goal2.id],
             GoalStatus.IN_PROGRESS,
-            async (goalId, updates) => goalManager.updateGoal(goalId, updates)
+            async (goalId, updates) => GoalManager.updateGoal(goalId, updates)
         );
         
         console.log('Bulk update result:', {
@@ -164,7 +164,7 @@ export async function testGoalManagerIntegration(): Promise<void> {
 
         // 8. Test data integrity
         console.log('8. Testing data integrity...');
-        const updatedAllGoals = (await goalManager.getAllGoals()).data || [];
+        const updatedAllGoals = (await GoalManager.getAllGoals()).data || [];
         
         const orphanedGoals = GoalUtils.findOrphanedGoals(updatedAllGoals);
         console.log(`Found ${orphanedGoals.length} orphaned goals`);
@@ -197,7 +197,7 @@ export async function testGoalManagerIntegration(): Promise<void> {
         throw error;
     } finally {
         // Cleanup
-        goalManager.dispose();
+        GoalManager.dispose();
         GoalUtils.clearCache();
     }
 }

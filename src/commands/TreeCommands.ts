@@ -9,7 +9,7 @@
 import * as vscode from 'vscode';
 import { Goal, GoalStatus, TaskStatus } from '../types/Goal';
 import { StateManager } from '../services/stateManager';
-import { GoalManager } from '../services/goalManager';
+import { GoalManager } from '../services/GoalManager';
 import { GoalTreeProvider } from '../providers/goalTreeProvider';
 import { ChangeNotificationService } from '../services/ChangeNotificationService';
 import { createLogger } from '../utils/logger';
@@ -24,7 +24,7 @@ export class TreeCommands {
 
     constructor(
         private stateManager: StateManager,
-        private goalManager: GoalManager,
+        private GoalManager: GoalManager,
         private treeProvider: GoalTreeProvider,
         private changeNotificationService: ChangeNotificationService,
         undoRedoService?: GoalUndoRedoService
@@ -208,10 +208,17 @@ export class TreeCommands {
                 placeHolder: 'Describe your goal...'
             });
 
-            const goal = await this.goalManager.createGoal({
+            const goalResult = await this.GoalManager.createGoal({
                 title: goalTitle.trim(),
                 description: description?.trim()
             });
+
+            if (!goalResult.success || !goalResult.data) {
+                vscode.window.showErrorMessage(`Failed to create goal: ${goalResult.error || 'Unknown error'}`);
+                return;
+            }
+
+            const goal = goalResult.data;
 
             this.treeProvider.refresh();
             this.changeNotificationService.fire({ type: 'goal:created', data: { goalId: goal.id, goal }, timestamp: new Date() });
@@ -274,11 +281,18 @@ export class TreeCommands {
                 placeHolder: 'Describe your sub-goal...'
             });
 
-            const subGoal = await this.goalManager.createGoal({
+            const subGoalResult = await this.GoalManager.createGoal({
                 title: goalTitle.trim(),
                 description: description?.trim(),
                 parentId: goalId
             });
+
+            if (!subGoalResult.success || !subGoalResult.data) {
+                vscode.window.showErrorMessage(`Failed to create sub-goal: ${subGoalResult.error || 'Unknown error'}`);
+                return;
+            }
+
+            const subGoal = subGoalResult.data;
 
             this.treeProvider.refresh();
             this.changeNotificationService.fire({ type: 'goal:created', data: { goalId: subGoal.id, goal: subGoal, parentId: goalId }, timestamp: new Date() });
@@ -337,11 +351,18 @@ export class TreeCommands {
 
             // Manually duplicate goal since duplicateGoal method doesn't exist
             const originalGoal = this.stateManager.getGoal(goalId)!;
-            const duplicatedGoal = await this.goalManager.createGoal({
+            const duplicatedGoalResult = await this.GoalManager.createGoal({
                 title: newTitle.trim(),
                 description: originalGoal.description,
                 parentId: originalGoal.parentId
             });
+
+            if (!duplicatedGoalResult.success || !duplicatedGoalResult.data) {
+                vscode.window.showErrorMessage(`Failed to duplicate goal: ${duplicatedGoalResult.error || 'Unknown error'}`);
+                return;
+            }
+
+            const duplicatedGoal = duplicatedGoalResult.data;
 
             this.treeProvider.refresh();
             this.changeNotificationService.fire({ type: 'goal:created', data: { goalId: duplicatedGoal.id, goal: duplicatedGoal }, timestamp: new Date() });
@@ -400,9 +421,17 @@ export class TreeCommands {
                 return; // User cancelled
             }
 
-            const task = await this.goalManager.addTask(goalId, {
-                title: taskTitle.trim()
+            const taskResult = await this.GoalManager.addTask(goalId, {
+                title: taskTitle.trim(),
+                goalId: goalId
             });
+
+            if (!taskResult.success || !taskResult.data) {
+                vscode.window.showErrorMessage(`Failed to create task: ${taskResult.error || 'Unknown error'}`);
+                return;
+            }
+
+            const task = taskResult.data;
 
             this.treeProvider.refresh();
             this.changeNotificationService.fire({ type: 'task:created', data: { goalId, taskId: task.id, task }, timestamp: new Date() });
@@ -464,7 +493,7 @@ export class TreeCommands {
                     newStatus = TaskStatus.IN_PROGRESS;
             }
 
-            await this.goalManager.updateTask(goalId, taskId, { status: newStatus });
+            await this.GoalManager.updateTask(goalId, taskId, { status: newStatus });
 
             this.treeProvider.refresh();
             this.changeNotificationService.fire({ type: 'task:status-changed', data: { goalId, taskId, newStatus, oldStatus: task.status }, timestamp: new Date() });
@@ -595,7 +624,7 @@ export class TreeCommands {
                 placeHolder: 'Task description...'
             });
 
-            await this.goalManager.updateTask(goalId, taskId, {
+            await this.GoalManager.updateTask(goalId, taskId, {
                 title: newTitle.trim(),
                 description: newDescription?.trim() ?? undefined
             });
@@ -648,7 +677,7 @@ export class TreeCommands {
                 return;
             }
 
-            await this.goalManager.deleteTask(goalId, taskId);
+            await this.GoalManager.deleteTask(goalId, taskId);
 
             this.treeProvider.refresh();
             this.changeNotificationService.fire({ type: 'task:deleted', data: { goalId, taskId }, timestamp: new Date() });
@@ -715,7 +744,7 @@ export class TreeCommands {
                 return;
             }
 
-            await this.goalManager.updateGoal(goalId, { status });
+            await this.GoalManager.updateGoal(goalId, { status });
 
             this.treeProvider.refresh();
             this.changeNotificationService.fire({ type: 'goal:status-changed', data: { goalId, newStatus: status, oldStatus: goal.status }, timestamp: new Date() });
@@ -773,7 +802,7 @@ export class TreeCommands {
                 placeHolder: 'Goal description...'
             });
 
-            await this.goalManager.updateGoal(goalId, {
+            await this.GoalManager.updateGoal(goalId, {
                 title: newTitle.trim(),
                 description: newDescription?.trim() ?? undefined
             });
@@ -830,7 +859,7 @@ export class TreeCommands {
                 return;
             }
 
-            await this.goalManager.deleteGoal(goalId);
+            await this.GoalManager.deleteGoal(goalId);
 
             this.treeProvider.refresh();
             this.changeNotificationService.fire({ type: 'goal:deleted', data: { goalId }, timestamp: new Date() });
@@ -1117,7 +1146,7 @@ export class TreeCommands {
                 return;
             }
 
-            await this.goalManager.addBlockingDependency(goalId, selectedItem.goalId);
+            await this.GoalManager.addBlockingDependency(goalId, selectedItem.goalId);
 
             this.treeProvider.refresh();
             this.changeNotificationService.fire({ type: 'goal:updated', data: { goalId }, timestamp: new Date() });
@@ -1172,7 +1201,7 @@ export class TreeCommands {
                 return;
             }
 
-            await this.goalManager.removeBlockingDependency(goalId, selectedItem.dependencyId);
+            await this.GoalManager.removeBlockingDependency(goalId, selectedItem.dependencyId);
 
             this.treeProvider.refresh();
             this.changeNotificationService.fire({ type: 'goal:updated', data: { goalId }, timestamp: new Date() });
@@ -1374,7 +1403,7 @@ export class TreeCommands {
             for (const goalData of goalsToImport) {
                 if (goalData && typeof goalData === 'object' && goalData.title) {
                     try {
-                        await this.goalManager.createGoal({
+                        await this.GoalManager.createGoal({
                             title: goalData.title,
                             description: goalData.description,
                             parentId: goalData.parentId

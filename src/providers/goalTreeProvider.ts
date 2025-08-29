@@ -3,7 +3,7 @@ import { Goal, Task } from '../types/Goal';
 import { TreeViewConfig, TreeRefreshOptions, TREE_CONTEXT_VALUES } from '../types/TreeTypes';
 import { GoalTreeItem } from './GoalTreeItem';
 import { StateManager } from '../services/stateManager';
-import { GoalManager } from '../services/goalManager';
+import { GoalManager } from '../services/GoalManager';
 import { ProgressCalculator, ProgressInfo } from '../utils/ProgressCalculator';
 import { ICONS, CONTEXT_VALUES, TREE_NODE_TYPES, DEFAULTS, ERROR_MESSAGES, CONFIG_KEYS } from '../constants';
 import { debounce, DebouncePresets, DebounceManager } from '../utils/debounce';
@@ -42,7 +42,7 @@ export class GoalTreeProvider implements vscode.TreeDataProvider<string> {
     readonly onDidChangeTreeData: vscode.Event<string | undefined | null | void> = this._onDidChangeTreeData.event;
 
     private stateManager: StateManager;
-    private goalManager: GoalManager;
+    private GoalManager: GoalManager;
     private progressCalculator: ProgressCalculator;
     private showCompleted: boolean = true;
     private groupByStatus: boolean = false;
@@ -65,9 +65,9 @@ export class GoalTreeProvider implements vscode.TreeDataProvider<string> {
     private memoizedCreateTooltip!: ((goal: Goal, progress: any) => string) & { clearCache: () => void };
     private memoizedFilterGoals!: ((goals: Goal[]) => Goal[]) & { clearCache: () => void };
 
-    constructor(stateManager: StateManager, goalManager: GoalManager, context?: vscode.ExtensionContext) {
+    constructor(stateManager: StateManager, GoalManager: GoalManager, context?: vscode.ExtensionContext) {
         this.stateManager = stateManager;
-        this.goalManager = goalManager;
+        this.GoalManager = GoalManager;
         this.progressCalculator = new ProgressCalculator();
         
         // Initialize performance components
@@ -618,7 +618,7 @@ export class GoalTreeProvider implements vscode.TreeDataProvider<string> {
             new Date(goal.metadata.dueDate).getTime() - Date.now() < 7 * 24 * 60 * 60 * 1000;
 
         // Build context with multiple attributes
-        let contextParts = [];
+        const contextParts = [];
 
         // Add base status context
         switch (goal.status) {

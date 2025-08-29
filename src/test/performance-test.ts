@@ -6,7 +6,7 @@
 import * as vscode from 'vscode';
 import { Goal, Task } from '../models';
 import { StateManager } from '../services/stateManager';
-import { GoalManager } from '../services/goalManager';
+import { GoalManager } from '../services/GoalManager';
 import { ValidationService } from '../services/ValidationService';
 import { DependencyService } from '../services/dependencyService';
 import { GoalTreeProvider } from '../providers/goalTreeProvider';
@@ -142,7 +142,7 @@ export class GoalTreePerformanceTest {
         this.logger.info(`Starting ${testName}`);
 
         // Initialize test environment
-        const { stateManager, goalManager, provider } = await this.setupTestEnvironment(config, context);
+        const { stateManager, GoalManager, provider } = await this.setupTestEnvironment(config, context);
         
         // Start monitoring
         const result: PerformanceTestResult = {
@@ -241,7 +241,7 @@ export class GoalTreePerformanceTest {
         context: vscode.ExtensionContext
     ): Promise<{
         stateManager: StateManager;
-        goalManager: GoalManager;
+        GoalManager: GoalManager;
         provider: GoalTreeProvider;
     }> {
         // Create test data
@@ -252,7 +252,7 @@ export class GoalTreePerformanceTest {
         const mockContext = {} as vscode.ExtensionContext; // Mock context for testing
         const validationService = new ValidationService();
         const dependencyService = new DependencyService(stateManager);
-        const goalManager = new GoalManager(validationService);
+        const GoalManager = new GoalManager(validationService);
         
         // Initialize with test data
         for (const goal of goals) {
@@ -260,9 +260,9 @@ export class GoalTreePerformanceTest {
         }
 
         // Create provider with performance optimizations
-        const provider = new GoalTreeProvider(stateManager, goalManager, context);
+        const provider = new GoalTreeProvider(stateManager, GoalManager, context);
 
-        return { stateManager, goalManager, provider };
+        return { stateManager, GoalManager, provider };
     }
 
     /**

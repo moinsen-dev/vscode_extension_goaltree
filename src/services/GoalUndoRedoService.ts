@@ -99,7 +99,7 @@ export interface GoalUndoRedoResult<T = any> extends GoalOperationResult<T> {
  * Main integration service class
  */
 export class GoalUndoRedoService {
-    private readonly goalManager: GoalManager;
+    private readonly GoalManager: GoalManager;
     private readonly undoRedoManager: UndoRedoManager;
     private readonly commandFactory: CommandFactory;
     private readonly config: Required<GoalUndoRedoServiceConfig>;
@@ -116,13 +116,13 @@ export class GoalUndoRedoService {
     }>();
     
     constructor(
-        goalManager: GoalManager,
+        GoalManager: GoalManager,
         undoRedoManager?: UndoRedoManager,
         config?: GoalUndoRedoServiceConfig
     ) {
-        this.goalManager = goalManager;
+        this.GoalManager = GoalManager;
         this.undoRedoManager = undoRedoManager || new UndoRedoManager();
-        this.commandFactory = new CommandFactory(this.goalManager);
+        this.commandFactory = new CommandFactory(this.GoalManager);
         
         // Apply default configuration
         this.config = {
@@ -190,7 +190,7 @@ export class GoalUndoRedoService {
         
         try {
             // Get current state for undo
-            const currentResult = await this.goalManager.getGoal(goalId);
+            const currentResult = await this.GoalManager.getGoal(goalId);
             if (!currentResult.success || !currentResult.data) {
                 return this.createErrorResult(`Goal ${goalId} not found`);
             }
@@ -225,7 +225,7 @@ export class GoalUndoRedoService {
         
         try {
             // Get current state for undo
-            const currentResult = await this.goalManager.getGoal(goalId);
+            const currentResult = await this.GoalManager.getGoal(goalId);
             if (!currentResult.success || !currentResult.data) {
                 return this.createErrorResult(`Goal ${goalId} not found`);
             }
@@ -255,7 +255,7 @@ export class GoalUndoRedoService {
         
         try {
             // Get current state for undo
-            const currentResult = await this.goalManager.getGoal(goalId);
+            const currentResult = await this.GoalManager.getGoal(goalId);
             if (!currentResult.success || !currentResult.data) {
                 return this.createErrorResult(`Goal ${goalId} not found`);
             }
@@ -269,7 +269,7 @@ export class GoalUndoRedoService {
             await this.undoRedoManager.executeCommand(command);
             
             // Get updated goal
-            const updatedResult = await this.goalManager.getGoal(goalId);
+            const updatedResult = await this.GoalManager.getGoal(goalId);
             if (!updatedResult.success || !updatedResult.data) {
                 return this.createErrorResult('Failed to retrieve updated goal');
             }
@@ -294,7 +294,7 @@ export class GoalUndoRedoService {
         
         try {
             // Get current state for undo
-            const currentResult = await this.goalManager.getGoal(goalId);
+            const currentResult = await this.GoalManager.getGoal(goalId);
             if (!currentResult.success || !currentResult.data) {
                 return this.createErrorResult(`Goal ${goalId} not found`);
             }
@@ -310,7 +310,7 @@ export class GoalUndoRedoService {
             await this.undoRedoManager.executeCommand(command);
             
             // Get updated goal
-            const updatedResult = await this.goalManager.getGoal(goalId);
+            const updatedResult = await this.GoalManager.getGoal(goalId);
             if (!updatedResult.success || !updatedResult.data) {
                 return this.createErrorResult('Failed to retrieve moved goal');
             }
@@ -366,7 +366,7 @@ export class GoalUndoRedoService {
         
         try {
             // Get current task state for undo
-            const goalResult = await this.goalManager.getGoal(goalId);
+            const goalResult = await this.GoalManager.getGoal(goalId);
             if (!goalResult.success || !goalResult.data) {
                 return this.createErrorResult(`Goal ${goalId} not found`);
             }
@@ -380,7 +380,7 @@ export class GoalUndoRedoService {
             await this.undoRedoManager.executeCommand(command);
             
             // Get updated task
-            const updatedGoalResult = await this.goalManager.getGoal(goalId);
+            const updatedGoalResult = await this.GoalManager.getGoal(goalId);
             if (!updatedGoalResult.success || !updatedGoalResult.data) {
                 return this.createErrorResult('Failed to retrieve updated goal');
             }
@@ -410,7 +410,7 @@ export class GoalUndoRedoService {
         
         try {
             // Get current task state for undo
-            const goalResult = await this.goalManager.getGoal(goalId);
+            const goalResult = await this.GoalManager.getGoal(goalId);
             if (!goalResult.success || !goalResult.data) {
                 return this.createErrorResult(`Goal ${goalId} not found`);
             }
@@ -443,7 +443,7 @@ export class GoalUndoRedoService {
         
         try {
             // Get current task state
-            const goalResult = await this.goalManager.getGoal(goalId);
+            const goalResult = await this.GoalManager.getGoal(goalId);
             if (!goalResult.success || !goalResult.data) {
                 return this.createErrorResult(`Goal ${goalId} not found`);
             }
@@ -462,7 +462,7 @@ export class GoalUndoRedoService {
             await this.undoRedoManager.executeCommand(command);
             
             // Get updated task
-            const updatedGoalResult = await this.goalManager.getGoal(goalId);
+            const updatedGoalResult = await this.GoalManager.getGoal(goalId);
             if (!updatedGoalResult.success || !updatedGoalResult.data) {
                 return this.createErrorResult('Failed to retrieve updated goal');
             }
@@ -499,7 +499,7 @@ export class GoalUndoRedoService {
             await this.undoRedoManager.executeCommand(command);
             
             // Get updated goal
-            const updatedResult = await this.goalManager.getGoal(blockedGoalId);
+            const updatedResult = await this.GoalManager.getGoal(blockedGoalId);
             if (!updatedResult.success || !updatedResult.data) {
                 return this.createErrorResult('Failed to retrieve updated goal');
             }
@@ -527,7 +527,7 @@ export class GoalUndoRedoService {
             await this.undoRedoManager.executeCommand(command);
             
             // Get updated goal
-            const updatedResult = await this.goalManager.getGoal(blockedGoalId);
+            const updatedResult = await this.GoalManager.getGoal(blockedGoalId);
             if (!updatedResult.success || !updatedResult.data) {
                 return this.createErrorResult('Failed to retrieve updated goal');
             }
@@ -734,7 +734,7 @@ export class GoalUndoRedoService {
      * Create a state snapshot manually
      */
     async createSnapshot(description: string): Promise<string> {
-        return await this.undoRedoManager.createGoalSnapshot(description, this.goalManager);
+        return await this.undoRedoManager.createGoalSnapshot(description, this.GoalManager);
     }
     
     /**
@@ -841,7 +841,7 @@ export class GoalUndoRedoService {
      * Get access to the underlying managers for advanced operations
      */
     getGoalManager(): GoalManager {
-        return this.goalManager;
+        return this.GoalManager;
     }
     
     getUndoRedoManager(): UndoRedoManager {
@@ -853,8 +853,8 @@ export class GoalUndoRedoService {
  * Factory function to create GoalUndoRedoService
  */
 export function createGoalUndoRedoService(
-    goalManager: GoalManager,
+    GoalManager: GoalManager,
     config?: GoalUndoRedoServiceConfig
 ): GoalUndoRedoService {
-    return new GoalUndoRedoService(goalManager, undefined, config);
+    return new GoalUndoRedoService(GoalManager, undefined, config);
 }

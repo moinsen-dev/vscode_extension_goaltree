@@ -121,7 +121,7 @@ export class IntegrityChecker {
             // Calculate statistics
             const stats = StorageUtils.calculateStorageStats(goals);
             let totalTasks = 0;
-            let maxDepth = 0;
+            const maxDepth = 0;
             let dependencyCount = 0;
 
             for (const goal of goals) {

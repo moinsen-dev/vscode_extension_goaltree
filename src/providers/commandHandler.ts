@@ -8,18 +8,18 @@ import { GoalTreeProvider } from './goalTreeProvider';
  * CommandHandler manages all VS Code commands for the goal tree extension
  */
 export class CommandHandler {
-    private goalManager: GoalManager;
+    private GoalManager: GoalManager;
     private stateManager: StateManager;
     private treeProvider: GoalTreeProvider;
     private context: vscode.ExtensionContext;
 
     constructor(
-        goalManager: GoalManager,
+        GoalManager: GoalManager,
         stateManager: StateManager,
         treeProvider: GoalTreeProvider,
         context: vscode.ExtensionContext
     ) {
-        this.goalManager = goalManager;
+        this.GoalManager = GoalManager;
         this.stateManager = stateManager;
         this.treeProvider = treeProvider;
         this.context = context;
@@ -124,7 +124,7 @@ export class CommandHandler {
         });
 
         try {
-            await this.goalManager.createGoal({
+            await this.GoalManager.createGoal({
                 title: title.trim(),
                 description: description?.trim(),
                 parentId: parentGoal?.id
@@ -190,7 +190,7 @@ export class CommandHandler {
                 description: description.trim() || undefined
             };
 
-            await this.goalManager.updateGoal(goal.id, updates);
+            await this.GoalManager.updateGoal(goal.id, updates);
             this.treeProvider.refresh();
             vscode.window.showInformationMessage(`Goal "${title}" updated successfully`);
         } catch (error) {
@@ -232,7 +232,7 @@ export class CommandHandler {
         if (choice !== 'Delete') return;
 
         try {
-            await this.goalManager.deleteGoal(goal.id);
+            await this.GoalManager.deleteGoal(goal.id);
             this.treeProvider.refresh();
             vscode.window.showInformationMessage(`Goal "${goal.title}" deleted successfully`);
         } catch (error) {
@@ -267,7 +267,7 @@ export class CommandHandler {
         if (!newTitle) return;
 
         try {
-            await this.goalManager.createGoal({
+            await this.GoalManager.createGoal({
                 title: newTitle.trim(),
                 description: goal.description,
                 parentId: goal.parentId
@@ -311,7 +311,7 @@ export class CommandHandler {
 
     private async updateGoalStatus(goal: Goal, status: Goal['status']): Promise<void> {
         try {
-            await this.goalManager.updateGoal(goal.id, { status });
+            await this.GoalManager.updateGoal(goal.id, { status });
             this.treeProvider.refresh();
             vscode.window.showInformationMessage(`Goal "${goal.title}" marked as ${status}`);
         } catch (error) {
@@ -339,7 +339,7 @@ export class CommandHandler {
         if (!title) return;
 
         try {
-            await this.goalManager.addTask(goal.id, {
+            await this.GoalManager.addTask(goal.id, {
                 title: title.trim()
             });
             this.treeProvider.refresh();
@@ -367,7 +367,7 @@ export class CommandHandler {
         if (title === undefined) return; // User cancelled
 
         try {
-            await this.goalManager.updateTask(goal.id, task.id, { title: title.trim() });
+            await this.GoalManager.updateTask(goal.id, task.id, { title: title.trim() });
             this.treeProvider.refresh();
             vscode.window.showInformationMessage(`Task "${title}" updated successfully`);
         } catch (error) {
@@ -391,7 +391,7 @@ export class CommandHandler {
         if (choice !== 'Delete') return;
 
         try {
-            await this.goalManager.deleteTask(goal.id, task.id);
+            await this.GoalManager.deleteTask(goal.id, task.id);
             this.treeProvider.refresh();
             vscode.window.showInformationMessage(`Task "${task.title}" deleted successfully`);
         } catch (error) {
@@ -421,7 +421,7 @@ export class CommandHandler {
         const newStatus: Task['status'] = task.status === 'done' ? 'todo' : 'done';
         
         try {
-            await this.goalManager.updateTask(goal.id, task.id, { status: newStatus });
+            await this.GoalManager.updateTask(goal.id, task.id, { status: newStatus });
             this.treeProvider.refresh();
             const statusText = newStatus === 'done' ? 'completed' : 'reopened';
             vscode.window.showInformationMessage(`Task "${task.title}" ${statusText}`);

@@ -14,7 +14,7 @@
  * automated backups, data integrity validation, and error recovery.
  */
 
-export { GoalManager } from './goalManager';
+export { GoalManager } from './GoalManager';
 export { TaskManager, 
          createTaskManager,
          type TaskOperationResult,

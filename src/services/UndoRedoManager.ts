@@ -694,10 +694,10 @@ export class UndoRedoManager {
     /**
      * Create a snapshot of current goal state for complex operations
      */
-    createGoalSnapshot(description: string, goalManager: GoalManager): Promise<string> {
+    createGoalSnapshot(description: string, GoalManager: GoalManager): Promise<string> {
         return new Promise(async (resolve, reject) => {
             try {
-                const allGoalsResult = await goalManager.getAllGoals();
+                const allGoalsResult = await GoalManager.getAllGoals();
                 if (!allGoalsResult.success || !allGoalsResult.data) {
                     reject(new Error('Failed to capture goals for snapshot'));
                     return;

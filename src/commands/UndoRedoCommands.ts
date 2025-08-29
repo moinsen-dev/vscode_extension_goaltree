@@ -40,15 +40,15 @@ abstract class BaseGoalCommand implements UndoableCommand {
     public readonly affectedGoalIds: string[] = [];
     public metadata?: Record<string, any>;
     
-    protected goalManager: GoalManager;
+    protected GoalManager: GoalManager;
     
     constructor(
-        goalManager: GoalManager,
+        GoalManager: GoalManager,
         public readonly description: string,
         affectedGoalIds: string[] = [],
         metadata?: Record<string, any>
     ) {
-        this.goalManager = goalManager;
+        this.GoalManager = GoalManager;
         this.id = this.generateId();
         this.timestamp = new Date();
         this.affectedGoalIds = [...affectedGoalIds];
@@ -87,11 +87,11 @@ export class CreateGoalCommand extends BaseGoalCommand {
     private createdGoal?: Goal;
     
     constructor(
-        goalManager: GoalManager,
+        GoalManager: GoalManager,
         private readonly params: CreateGoalParams
     ) {
         super(
-            goalManager,
+            GoalManager,
             `Create goal: ${params.title}`,
             params.parentId ? [params.parentId] : [],
             { operation: 'create', params }
@@ -100,7 +100,7 @@ export class CreateGoalCommand extends BaseGoalCommand {
     
     async execute(): Promise<void> {
         try {
-            const result = await this.goalManager.createGoal(this.params);
+            const result = await this.GoalManager.createGoal(this.params);
             if (!result.success || !result.data) {
                 throw new Error(result.error || 'Failed to create goal');
             }
@@ -120,7 +120,7 @@ export class CreateGoalCommand extends BaseGoalCommand {
         }
         
         try {
-            const result = await this.goalManager.deleteGoal(this.createdGoal.id);
+            const result = await this.GoalManager.deleteGoal(this.createdGoal.id);
             if (!result.success) {
                 throw new Error(result.error || 'Failed to delete goal during undo');
             }
@@ -144,13 +144,13 @@ export class UpdateGoalCommand extends BaseGoalCommand {
     private updatedGoal?: Goal;
     
     constructor(
-        goalManager: GoalManager,
+        GoalManager: GoalManager,
         private readonly goalId: string,
         private readonly updates: UpdateGoalParams,
         originalState?: Goal
     ) {
         super(
-            goalManager,
+            GoalManager,
             `Update goal: ${updates.title || goalId}`,
             [goalId],
             { operation: 'update', goalId, updates }
@@ -162,14 +162,14 @@ export class UpdateGoalCommand extends BaseGoalCommand {
         try {
             // Get current state if not provided
             if (!this.originalState) {
-                const currentResult = await this.goalManager.getGoal(this.goalId);
+                const currentResult = await this.GoalManager.getGoal(this.goalId);
                 if (!currentResult.success || !currentResult.data) {
                     throw new Error(`Goal ${this.goalId} not found`);
                 }
                 this.originalState = { ...currentResult.data };
             }
             
-            const result = await this.goalManager.updateGoal(this.goalId, this.updates);
+            const result = await this.GoalManager.updateGoal(this.goalId, this.updates);
             if (!result.success || !result.data) {
                 throw new Error(result.error || 'Failed to update goal');
             }
@@ -198,7 +198,7 @@ export class UpdateGoalCommand extends BaseGoalCommand {
                 metadata: this.originalState.metadata
             };
             
-            const result = await this.goalManager.updateGoal(this.goalId, restoreUpdates);
+            const result = await this.GoalManager.updateGoal(this.goalId, restoreUpdates);
             if (!result.success) {
                 throw new Error(result.error || 'Failed to restore goal during undo');
             }
@@ -226,12 +226,12 @@ export class DeleteGoalCommand extends BaseGoalCommand {
     private deletedChildGoals: Goal[] = [];
     
     constructor(
-        goalManager: GoalManager,
+        GoalManager: GoalManager,
         private readonly goalId: string,
         deletedGoal?: Goal
     ) {
         super(
-            goalManager,
+            GoalManager,
             `Delete goal: ${deletedGoal?.title || goalId}`,
             [goalId],
             { operation: 'delete', goalId }
@@ -243,7 +243,7 @@ export class DeleteGoalCommand extends BaseGoalCommand {
         try {
             // Capture the goal state before deletion if not provided
             if (!this.deletedGoal) {
-                const goalResult = await this.goalManager.getGoal(this.goalId);
+                const goalResult = await this.GoalManager.getGoal(this.goalId);
                 if (!goalResult.success || !goalResult.data) {
                     throw new Error(`Goal ${this.goalId} not found`);
                 }
@@ -251,13 +251,13 @@ export class DeleteGoalCommand extends BaseGoalCommand {
             }
             
             // Capture child goals that will be deleted recursively
-            const childrenResult = await this.goalManager.getChildGoals(this.goalId);
+            const childrenResult = await this.GoalManager.getChildGoals(this.goalId);
             if (childrenResult.success && childrenResult.data) {
                 // Deep capture all descendants
                 await this.captureDescendants(childrenResult.data);
             }
             
-            const result = await this.goalManager.deleteGoal(this.goalId);
+            const result = await this.GoalManager.deleteGoal(this.goalId);
             if (!result.success) {
                 throw new Error(result.error || 'Failed to delete goal');
             }
@@ -282,7 +282,7 @@ export class DeleteGoalCommand extends BaseGoalCommand {
                 metadata: this.deletedGoal.metadata
             };
             
-            const createResult = await this.goalManager.createGoal(createParams);
+            const createResult = await this.GoalManager.createGoal(createParams);
             if (!createResult.success || !createResult.data) {
                 throw new Error(createResult.error || 'Failed to recreate goal during undo');
             }
@@ -295,13 +295,14 @@ export class DeleteGoalCommand extends BaseGoalCommand {
                 blockedByIds: [...this.deletedGoal.blockedByIds]
             };
             
-            await this.goalManager.updateGoal(recreatedGoal.id, restoreUpdates);
+            await this.GoalManager.updateGoal(recreatedGoal.id, restoreUpdates);
             
             // Restore tasks
             for (const task of this.deletedGoal.tasks) {
-                await this.goalManager.addTask(recreatedGoal.id, {
+                await this.GoalManager.addTask(recreatedGoal.id, {
                     title: task.title,
-                    description: task.description
+                    description: task.description,
+                    goalId: recreatedGoal.id
                 });
             }
             
@@ -320,7 +321,7 @@ export class DeleteGoalCommand extends BaseGoalCommand {
             this.affectedGoalIds.push(child.id);
             
             // Get grandchildren
-            const grandChildrenResult = await this.goalManager.getChildGoals(child.id);
+            const grandChildrenResult = await this.GoalManager.getChildGoals(child.id);
             if (grandChildrenResult.success && grandChildrenResult.data && grandChildrenResult.data.length > 0) {
                 await this.captureDescendants(grandChildrenResult.data);
             }
@@ -349,7 +350,7 @@ export class DeleteGoalCommand extends BaseGoalCommand {
                 metadata: child.metadata
             };
             
-            const createResult = await this.goalManager.createGoal(createParams);
+            const createResult = await this.GoalManager.createGoal(createParams);
             if (createResult.success && createResult.data) {
                 idMapping.set(child.id, createResult.data.id);
                 
@@ -359,13 +360,14 @@ export class DeleteGoalCommand extends BaseGoalCommand {
                     blockedByIds: [...child.blockedByIds]
                 };
                 
-                await this.goalManager.updateGoal(createResult.data.id, restoreUpdates);
+                await this.GoalManager.updateGoal(createResult.data.id, restoreUpdates);
                 
                 // Restore tasks
                 for (const task of child.tasks) {
-                    await this.goalManager.addTask(createResult.data.id, {
+                    await this.GoalManager.addTask(createResult.data.id, {
                         title: task.title,
-                        description: task.description
+                        description: task.description,
+                        goalId: createResult.data.id
                     });
                 }
             }
@@ -388,13 +390,13 @@ export class ChangeGoalStatusCommand extends BaseGoalCommand {
     private originalStatus?: GoalStatusType;
     
     constructor(
-        goalManager: GoalManager,
+        GoalManager: GoalManager,
         private readonly goalId: string,
         private readonly newStatus: GoalStatusType,
         originalStatus?: GoalStatusType
     ) {
         super(
-            goalManager,
+            GoalManager,
             `Change status to ${newStatus} for goal ${goalId}`,
             [goalId],
             { operation: 'statusChange', goalId, newStatus, originalStatus }
@@ -406,14 +408,14 @@ export class ChangeGoalStatusCommand extends BaseGoalCommand {
         try {
             // Capture original status if not provided
             if (!this.originalStatus) {
-                const goalResult = await this.goalManager.getGoal(this.goalId);
+                const goalResult = await this.GoalManager.getGoal(this.goalId);
                 if (!goalResult.success || !goalResult.data) {
                     throw new Error(`Goal ${this.goalId} not found`);
                 }
                 this.originalStatus = goalResult.data.status;
             }
             
-            const result = await this.goalManager.updateGoal(this.goalId, {
+            const result = await this.GoalManager.updateGoal(this.goalId, {
                 status: this.newStatus
             });
             
@@ -433,7 +435,7 @@ export class ChangeGoalStatusCommand extends BaseGoalCommand {
         }
         
         try {
-            const result = await this.goalManager.updateGoal(this.goalId, {
+            const result = await this.GoalManager.updateGoal(this.goalId, {
                 status: this.originalStatus
             });
             
@@ -463,7 +465,7 @@ export class MoveGoalCommand extends BaseGoalCommand {
     private originalParentId?: string;
     
     constructor(
-        goalManager: GoalManager,
+        GoalManager: GoalManager,
         private readonly goalId: string,
         private readonly newParentId: string | undefined,
         originalParentId?: string
@@ -473,7 +475,7 @@ export class MoveGoalCommand extends BaseGoalCommand {
         if (originalParentId) affectedGoals.push(originalParentId);
         
         super(
-            goalManager,
+            GoalManager,
             `Move goal ${goalId} to ${newParentId || 'root'}`,
             affectedGoals,
             { operation: 'move', goalId, newParentId, originalParentId }
@@ -485,14 +487,14 @@ export class MoveGoalCommand extends BaseGoalCommand {
         try {
             // Capture original parent if not provided
             if (this.originalParentId === undefined) {
-                const goalResult = await this.goalManager.getGoal(this.goalId);
+                const goalResult = await this.GoalManager.getGoal(this.goalId);
                 if (!goalResult.success || !goalResult.data) {
                     throw new Error(`Goal ${this.goalId} not found`);
                 }
                 this.originalParentId = goalResult.data.parentId;
             }
             
-            const result = await this.goalManager.updateGoal(this.goalId, {
+            const result = await this.GoalManager.updateGoal(this.goalId, {
                 parentId: this.newParentId
             });
             
@@ -508,7 +510,7 @@ export class MoveGoalCommand extends BaseGoalCommand {
     
     async undo(): Promise<void> {
         try {
-            const result = await this.goalManager.updateGoal(this.goalId, {
+            const result = await this.GoalManager.updateGoal(this.goalId, {
                 parentId: this.originalParentId
             });
             
@@ -542,12 +544,12 @@ export class AddTaskCommand extends BaseGoalCommand {
     private addedTask?: Task;
     
     constructor(
-        goalManager: GoalManager,
+        GoalManager: GoalManager,
         private readonly goalId: string,
         private readonly params: CreateTaskParams
     ) {
         super(
-            goalManager,
+            GoalManager,
             `Add task: ${params.title} to goal ${goalId}`,
             [goalId],
             { operation: 'addTask', goalId, params }
@@ -556,7 +558,7 @@ export class AddTaskCommand extends BaseGoalCommand {
     
     async execute(): Promise<void> {
         try {
-            const result = await this.goalManager.addTask(this.goalId, this.params);
+            const result = await this.GoalManager.addTask(this.goalId, this.params);
             if (!result.success || !result.data) {
                 throw new Error(result.error || 'Failed to add task');
             }
@@ -575,7 +577,7 @@ export class AddTaskCommand extends BaseGoalCommand {
         }
         
         try {
-            const result = await this.goalManager.deleteTask(this.goalId, this.addedTask.id);
+            const result = await this.GoalManager.deleteTask(this.goalId, this.addedTask.id);
             if (!result.success) {
                 throw new Error(result.error || 'Failed to delete task during undo');
             }
@@ -598,14 +600,14 @@ export class UpdateTaskCommand extends BaseGoalCommand {
     private originalState?: Task;
     
     constructor(
-        goalManager: GoalManager,
+        GoalManager: GoalManager,
         private readonly goalId: string,
         private readonly taskId: string,
         private readonly updates: UpdateTaskParams,
         originalState?: Task
     ) {
         super(
-            goalManager,
+            GoalManager,
             `Update task: ${updates.title || taskId}`,
             [goalId],
             { operation: 'updateTask', goalId, taskId, updates }
@@ -617,7 +619,7 @@ export class UpdateTaskCommand extends BaseGoalCommand {
         try {
             // Capture original state if not provided
             if (!this.originalState) {
-                const goalResult = await this.goalManager.getGoal(this.goalId);
+                const goalResult = await this.GoalManager.getGoal(this.goalId);
                 if (!goalResult.success || !goalResult.data) {
                     throw new Error(`Goal ${this.goalId} not found`);
                 }
@@ -629,7 +631,7 @@ export class UpdateTaskCommand extends BaseGoalCommand {
                 this.originalState = { ...task };
             }
             
-            const result = await this.goalManager.updateTask(this.goalId, this.taskId, this.updates);
+            const result = await this.GoalManager.updateTask(this.goalId, this.taskId, this.updates);
             if (!result.success) {
                 throw new Error(result.error || 'Failed to update task');
             }
@@ -653,7 +655,7 @@ export class UpdateTaskCommand extends BaseGoalCommand {
                 order: this.originalState.order
             };
             
-            const result = await this.goalManager.updateTask(this.goalId, this.taskId, restoreUpdates);
+            const result = await this.GoalManager.updateTask(this.goalId, this.taskId, restoreUpdates);
             if (!result.success) {
                 throw new Error(result.error || 'Failed to restore task during undo');
             }
@@ -676,13 +678,13 @@ export class DeleteTaskCommand extends BaseGoalCommand {
     private deletedTask?: Task;
     
     constructor(
-        goalManager: GoalManager,
+        GoalManager: GoalManager,
         private readonly goalId: string,
         private readonly taskId: string,
         deletedTask?: Task
     ) {
         super(
-            goalManager,
+            GoalManager,
             `Delete task: ${deletedTask?.title || taskId}`,
             [goalId],
             { operation: 'deleteTask', goalId, taskId }
@@ -694,7 +696,7 @@ export class DeleteTaskCommand extends BaseGoalCommand {
         try {
             // Capture task state if not provided
             if (!this.deletedTask) {
-                const goalResult = await this.goalManager.getGoal(this.goalId);
+                const goalResult = await this.GoalManager.getGoal(this.goalId);
                 if (!goalResult.success || !goalResult.data) {
                     throw new Error(`Goal ${this.goalId} not found`);
                 }
@@ -706,7 +708,7 @@ export class DeleteTaskCommand extends BaseGoalCommand {
                 this.deletedTask = { ...task };
             }
             
-            const result = await this.goalManager.deleteTask(this.goalId, this.taskId);
+            const result = await this.GoalManager.deleteTask(this.goalId, this.taskId);
             if (!result.success) {
                 throw new Error(result.error || 'Failed to delete task');
             }
@@ -729,7 +731,7 @@ export class DeleteTaskCommand extends BaseGoalCommand {
                 goalId: this.goalId
             };
             
-            const addResult = await this.goalManager.addTask(this.goalId, createParams);
+            const addResult = await this.GoalManager.addTask(this.goalId, createParams);
             if (!addResult.success || !addResult.data) {
                 throw new Error(addResult.error || 'Failed to recreate task during undo');
             }
@@ -740,7 +742,7 @@ export class DeleteTaskCommand extends BaseGoalCommand {
                 order: this.deletedTask.order
             };
             
-            await this.goalManager.updateTask(this.goalId, addResult.data.id, restoreUpdates);
+            await this.GoalManager.updateTask(this.goalId, addResult.data.id, restoreUpdates);
             
         } catch (error) {
             this.logError('undo', error);
@@ -760,14 +762,14 @@ export class ChangeTaskStatusCommand extends BaseGoalCommand {
     private originalStatus?: TaskStatusType;
     
     constructor(
-        goalManager: GoalManager,
+        GoalManager: GoalManager,
         private readonly goalId: string,
         private readonly taskId: string,
         private readonly newStatus: TaskStatusType,
         originalStatus?: TaskStatusType
     ) {
         super(
-            goalManager,
+            GoalManager,
             `Change task status to ${newStatus}`,
             [goalId],
             { operation: 'taskStatusChange', goalId, taskId, newStatus, originalStatus }
@@ -779,7 +781,7 @@ export class ChangeTaskStatusCommand extends BaseGoalCommand {
         try {
             // Capture original status if not provided
             if (!this.originalStatus) {
-                const goalResult = await this.goalManager.getGoal(this.goalId);
+                const goalResult = await this.GoalManager.getGoal(this.goalId);
                 if (!goalResult.success || !goalResult.data) {
                     throw new Error(`Goal ${this.goalId} not found`);
                 }
@@ -791,7 +793,7 @@ export class ChangeTaskStatusCommand extends BaseGoalCommand {
                 this.originalStatus = task.status;
             }
             
-            const result = await this.goalManager.updateTask(this.goalId, this.taskId, {
+            const result = await this.GoalManager.updateTask(this.goalId, this.taskId, {
                 status: this.newStatus
             });
             
@@ -811,7 +813,7 @@ export class ChangeTaskStatusCommand extends BaseGoalCommand {
         }
         
         try {
-            const result = await this.goalManager.updateTask(this.goalId, this.taskId, {
+            const result = await this.GoalManager.updateTask(this.goalId, this.taskId, {
                 status: this.originalStatus
             });
             
@@ -843,12 +845,12 @@ export class ChangeTaskStatusCommand extends BaseGoalCommand {
  */
 export class AddDependencyCommand extends BaseGoalCommand {
     constructor(
-        goalManager: GoalManager,
+        GoalManager: GoalManager,
         private readonly blockedGoalId: string,
         private readonly blockingGoalId: string
     ) {
         super(
-            goalManager,
+            GoalManager,
             `Add dependency: ${blockingGoalId} blocks ${blockedGoalId}`,
             [blockedGoalId, blockingGoalId],
             { operation: 'addDependency', blockedGoalId, blockingGoalId }
@@ -857,7 +859,7 @@ export class AddDependencyCommand extends BaseGoalCommand {
     
     async execute(): Promise<void> {
         try {
-            const result = await this.goalManager.addBlockingDependency(this.blockedGoalId, this.blockingGoalId);
+            const result = await this.GoalManager.addBlockingDependency(this.blockedGoalId, this.blockingGoalId);
             if (!result.success) {
                 throw new Error(result.error || 'Failed to add blocking dependency');
             }
@@ -870,7 +872,7 @@ export class AddDependencyCommand extends BaseGoalCommand {
     
     async undo(): Promise<void> {
         try {
-            const result = await this.goalManager.removeBlockingDependency(this.blockedGoalId, this.blockingGoalId);
+            const result = await this.GoalManager.removeBlockingDependency(this.blockedGoalId, this.blockingGoalId);
             if (!result.success) {
                 throw new Error(result.error || 'Failed to remove blocking dependency during undo');
             }
@@ -887,12 +889,12 @@ export class AddDependencyCommand extends BaseGoalCommand {
  */
 export class RemoveDependencyCommand extends BaseGoalCommand {
     constructor(
-        goalManager: GoalManager,
+        GoalManager: GoalManager,
         private readonly blockedGoalId: string,
         private readonly blockingGoalId: string
     ) {
         super(
-            goalManager,
+            GoalManager,
             `Remove dependency: ${blockingGoalId} no longer blocks ${blockedGoalId}`,
             [blockedGoalId, blockingGoalId],
             { operation: 'removeDependency', blockedGoalId, blockingGoalId }
@@ -901,7 +903,7 @@ export class RemoveDependencyCommand extends BaseGoalCommand {
     
     async execute(): Promise<void> {
         try {
-            const result = await this.goalManager.removeBlockingDependency(this.blockedGoalId, this.blockingGoalId);
+            const result = await this.GoalManager.removeBlockingDependency(this.blockedGoalId, this.blockingGoalId);
             if (!result.success) {
                 throw new Error(result.error || 'Failed to remove blocking dependency');
             }
@@ -914,7 +916,7 @@ export class RemoveDependencyCommand extends BaseGoalCommand {
     
     async undo(): Promise<void> {
         try {
-            const result = await this.goalManager.addBlockingDependency(this.blockedGoalId, this.blockingGoalId);
+            const result = await this.GoalManager.addBlockingDependency(this.blockedGoalId, this.blockingGoalId);
             if (!result.success) {
                 throw new Error(result.error || 'Failed to add blocking dependency during undo');
             }
@@ -937,12 +939,12 @@ export class BulkStatusChangeCommand extends BaseGoalCommand {
     private originalStates: Map<string, GoalStatusType> = new Map();
     
     constructor(
-        goalManager: GoalManager,
+        GoalManager: GoalManager,
         private readonly goalIds: string[],
         private readonly newStatus: GoalStatusType
     ) {
         super(
-            goalManager,
+            GoalManager,
             `Change status to ${newStatus} for ${goalIds.length} goals`,
             [...goalIds],
             { operation: 'bulkStatusChange', goalIds, newStatus }
@@ -953,7 +955,7 @@ export class BulkStatusChangeCommand extends BaseGoalCommand {
         try {
             // Capture original states
             for (const goalId of this.goalIds) {
-                const goalResult = await this.goalManager.getGoal(goalId);
+                const goalResult = await this.GoalManager.getGoal(goalId);
                 if (goalResult.success && goalResult.data) {
                     this.originalStates.set(goalId, goalResult.data.status);
                 }
@@ -961,7 +963,7 @@ export class BulkStatusChangeCommand extends BaseGoalCommand {
             
             // Apply status changes
             for (const goalId of this.goalIds) {
-                const result = await this.goalManager.updateGoal(goalId, {
+                const result = await this.GoalManager.updateGoal(goalId, {
                     status: this.newStatus
                 });
                 
@@ -980,7 +982,7 @@ export class BulkStatusChangeCommand extends BaseGoalCommand {
         try {
             // Restore original states
             for (const [goalId, originalStatus] of this.originalStates.entries()) {
-                const result = await this.goalManager.updateGoal(goalId, {
+                const result = await this.GoalManager.updateGoal(goalId, {
                     status: originalStatus
                 });
                 
@@ -1008,11 +1010,11 @@ export class BulkDeleteCommand extends BaseGoalCommand {
     private deletionOrder: string[] = [];
     
     constructor(
-        goalManager: GoalManager,
+        GoalManager: GoalManager,
         private readonly goalIds: string[]
     ) {
         super(
-            goalManager,
+            GoalManager,
             `Delete ${goalIds.length} goals`,
             [...goalIds],
             { operation: 'bulkDelete', goalIds }
@@ -1026,7 +1028,7 @@ export class BulkDeleteCommand extends BaseGoalCommand {
             
             // Delete in determined order
             for (const goalId of this.deletionOrder) {
-                const result = await this.goalManager.deleteGoal(goalId);
+                const result = await this.GoalManager.deleteGoal(goalId);
                 if (!result.success) {
                     throw new Error(`Failed to delete goal ${goalId}: ${result.error}`);
                 }
@@ -1060,7 +1062,7 @@ export class BulkDeleteCommand extends BaseGoalCommand {
                     metadata: goal.metadata
                 };
                 
-                const createResult = await this.goalManager.createGoal(createParams);
+                const createResult = await this.GoalManager.createGoal(createParams);
                 if (createResult.success && createResult.data) {
                     idMapping.set(originalId, createResult.data.id);
                     
@@ -1070,13 +1072,14 @@ export class BulkDeleteCommand extends BaseGoalCommand {
                         blockedByIds: [...goal.blockedByIds] // Note: dependency IDs may need remapping
                     };
                     
-                    await this.goalManager.updateGoal(createResult.data.id, restoreUpdates);
+                    await this.GoalManager.updateGoal(createResult.data.id, restoreUpdates);
                     
                     // Restore tasks
                     for (const task of goal.tasks) {
-                        await this.goalManager.addTask(createResult.data.id, {
+                        await this.GoalManager.addTask(createResult.data.id, {
                             title: task.title,
-                            description: task.description
+                            description: task.description,
+                            goalId: createResult.data.id
                         });
                     }
                 }
@@ -1094,7 +1097,7 @@ export class BulkDeleteCommand extends BaseGoalCommand {
         const parentToChildren = new Map<string, string[]>();
         
         for (const goalId of this.goalIds) {
-            const goalResult = await this.goalManager.getGoal(goalId);
+            const goalResult = await this.GoalManager.getGoal(goalId);
             if (goalResult.success && goalResult.data) {
                 const goal = goalResult.data;
                 goalHierarchy.set(goalId, { ...goal });
@@ -1148,58 +1151,58 @@ export class BulkDeleteCommand extends BaseGoalCommand {
  * Factory functions for creating command instances
  */
 export class CommandFactory {
-    constructor(private goalManager: GoalManager) {}
+    constructor(private GoalManager: GoalManager) {}
     
     createGoal(params: CreateGoalParams): CreateGoalCommand {
-        return new CreateGoalCommand(this.goalManager, params);
+        return new CreateGoalCommand(this.GoalManager, params);
     }
     
     updateGoal(goalId: string, updates: UpdateGoalParams, originalState?: Goal): UpdateGoalCommand {
-        return new UpdateGoalCommand(this.goalManager, goalId, updates, originalState);
+        return new UpdateGoalCommand(this.GoalManager, goalId, updates, originalState);
     }
     
     deleteGoal(goalId: string, deletedGoal?: Goal): DeleteGoalCommand {
-        return new DeleteGoalCommand(this.goalManager, goalId, deletedGoal);
+        return new DeleteGoalCommand(this.GoalManager, goalId, deletedGoal);
     }
     
     changeGoalStatus(goalId: string, newStatus: GoalStatusType, originalStatus?: GoalStatusType): ChangeGoalStatusCommand {
-        return new ChangeGoalStatusCommand(this.goalManager, goalId, newStatus, originalStatus);
+        return new ChangeGoalStatusCommand(this.GoalManager, goalId, newStatus, originalStatus);
     }
     
     moveGoal(goalId: string, newParentId: string | undefined, originalParentId?: string): MoveGoalCommand {
-        return new MoveGoalCommand(this.goalManager, goalId, newParentId, originalParentId);
+        return new MoveGoalCommand(this.GoalManager, goalId, newParentId, originalParentId);
     }
     
     addTask(goalId: string, params: CreateTaskParams): AddTaskCommand {
-        return new AddTaskCommand(this.goalManager, goalId, params);
+        return new AddTaskCommand(this.GoalManager, goalId, params);
     }
     
     updateTask(goalId: string, taskId: string, updates: UpdateTaskParams, originalState?: Task): UpdateTaskCommand {
-        return new UpdateTaskCommand(this.goalManager, goalId, taskId, updates, originalState);
+        return new UpdateTaskCommand(this.GoalManager, goalId, taskId, updates, originalState);
     }
     
     deleteTask(goalId: string, taskId: string, deletedTask?: Task): DeleteTaskCommand {
-        return new DeleteTaskCommand(this.goalManager, goalId, taskId, deletedTask);
+        return new DeleteTaskCommand(this.GoalManager, goalId, taskId, deletedTask);
     }
     
     changeTaskStatus(goalId: string, taskId: string, newStatus: TaskStatusType, originalStatus?: TaskStatusType): ChangeTaskStatusCommand {
-        return new ChangeTaskStatusCommand(this.goalManager, goalId, taskId, newStatus, originalStatus);
+        return new ChangeTaskStatusCommand(this.GoalManager, goalId, taskId, newStatus, originalStatus);
     }
     
     addDependency(blockedGoalId: string, blockingGoalId: string): AddDependencyCommand {
-        return new AddDependencyCommand(this.goalManager, blockedGoalId, blockingGoalId);
+        return new AddDependencyCommand(this.GoalManager, blockedGoalId, blockingGoalId);
     }
     
     removeDependency(blockedGoalId: string, blockingGoalId: string): RemoveDependencyCommand {
-        return new RemoveDependencyCommand(this.goalManager, blockedGoalId, blockingGoalId);
+        return new RemoveDependencyCommand(this.GoalManager, blockedGoalId, blockingGoalId);
     }
     
     bulkStatusChange(goalIds: string[], newStatus: GoalStatusType): BulkStatusChangeCommand {
-        return new BulkStatusChangeCommand(this.goalManager, goalIds, newStatus);
+        return new BulkStatusChangeCommand(this.GoalManager, goalIds, newStatus);
     }
     
     bulkDelete(goalIds: string[]): BulkDeleteCommand {
-        return new BulkDeleteCommand(this.goalManager, goalIds);
+        return new BulkDeleteCommand(this.GoalManager, goalIds);
     }
 }
 
